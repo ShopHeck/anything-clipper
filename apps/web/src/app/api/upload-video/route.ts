@@ -2,10 +2,22 @@
 // Returns { url: "<assemblyai-cdn-url>" }
 // Uses Node runtime (not edge) so we can buffer large files reliably.
 
+import { getApiUser, unauthorized } from '@/app/api/utils/auth';
+import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
+
 export const runtime = 'nodejs';
 export const maxDuration = 120; // 2 min for large uploads
 
 export async function POST(request: Request) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
+  const limit = await consumeRateLimit(user.id, 'upload.video', {
+    limit: 15,
+    windowSec: 3600,
+  });
+  if (!limit.ok) return rateLimited(limit);
+
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
   if (!apiKey) {
     return Response.json(

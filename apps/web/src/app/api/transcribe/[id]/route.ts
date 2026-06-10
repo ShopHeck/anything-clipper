@@ -1,5 +1,6 @@
 // Poll AssemblyAI for transcript status, then build segments and viral-score them.
 // GET /api/transcribe/:id
+import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -251,7 +252,10 @@ Score all ${Math.min(segments.length, 25)} segments.`;
   }
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const { id } = await params;
     const apiKey = process.env.ASSEMBLYAI_API_KEY;

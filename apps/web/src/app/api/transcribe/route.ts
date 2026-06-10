@@ -2,10 +2,22 @@
 // Accepts: { fileUrl: string }
 // Returns: { transcriptId: string, status: string }
 
+import { getApiUser, unauthorized } from '@/app/api/utils/auth';
+import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
+
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function POST(request: Request) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
+  const limit = await consumeRateLimit(user.id, 'transcribe.submit', {
+    limit: 20,
+    windowSec: 3600,
+  });
+  if (!limit.ok) return rateLimited(limit);
+
   try {
     const body = await request.json();
     const { fileUrl } = body as { fileUrl: string };

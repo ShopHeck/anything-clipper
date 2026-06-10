@@ -1,13 +1,26 @@
+import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+// Every handler verifies the project belongs to the signed-in user before
+// touching it (or any of its child rows).
+async function ownsProject(userId: string, projectId: string): Promise<boolean> {
+  const [row] = await sql`
+    SELECT id FROM projects WHERE id = ${projectId} AND user_id = ${userId}
+  `;
+  return Boolean(row);
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const { id } = await params;
 
     const [project] = await sql`
-      SELECT id, title, file_name, file_url, total_duration, viral_score,
+      SELECT id, title, file_name, file_url, storage_key, total_duration, viral_score,
              word_count, clip_count, status, created_at, updated_at
-      FROM projects WHERE id = ${id}
+      FROM projects WHERE id = ${id} AND user_id = ${user.id}
     `;
 
     if (!project) {
@@ -22,7 +35,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     `;
 
     const clips = await sql`
-      SELECT id, title, hook, score, platforms, start_time, end_time, duration_label, reason, thumbnail, created_at
+      SELECT id, title, hook, score, platforms, start_time, end_time, duration_label,
+             reason, thumbnail, rendered_url, render_status, created_at
       FROM clips
       WHERE project_id = ${id}
       ORDER BY created_at ASC
@@ -36,8 +50,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const { id } = await params;
+    if (!(await ownsProject(user.id, id))) {
+      return Response.json({ error: 'Project not found' }, { status: 404 });
+    }
+
     const body = await request.json();
     const {
       title,
@@ -125,10 +146,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const { id } = await params;
-    await sql`DELETE FROM projects WHERE id = ${id}`;
+    await sql`DELETE FROM projects WHERE id = ${id} AND user_id = ${user.id}`;
     return Response.json({ success: true });
   } catch (error) {
     console.error('Delete project error:', error);

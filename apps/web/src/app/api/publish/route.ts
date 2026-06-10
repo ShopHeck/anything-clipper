@@ -1,6 +1,10 @@
+import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
 
 export async function GET(request: Request) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('projectId');
@@ -11,7 +15,7 @@ export async function GET(request: Request) {
         SELECT pj.*, c.title as clip_title, c.score as clip_score, c.platforms as clip_platforms
         FROM publish_jobs pj
         LEFT JOIN clips c ON c.id = pj.clip_id AND c.project_id = pj.project_id
-        WHERE pj.project_id = ${projectId}
+        WHERE pj.project_id = ${projectId} AND pj.user_id = ${user.id}
         ORDER BY pj.created_at DESC
       `;
     } else {
@@ -19,6 +23,7 @@ export async function GET(request: Request) {
         SELECT pj.*, c.title as clip_title, c.score as clip_score
         FROM publish_jobs pj
         LEFT JOIN clips c ON c.id = pj.clip_id AND c.project_id = pj.project_id
+        WHERE pj.user_id = ${user.id}
         ORDER BY pj.created_at DESC
         LIMIT 100
       `;
@@ -32,6 +37,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const body = await request.json();
     const { clip_id, project_id, platform, caption, hashtags, scheduled_at } = body;
@@ -43,9 +51,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // The clip (and its project) must belong to the caller.
+    const [owned] = await sql`
+      SELECT c.id FROM clips c
+      JOIN projects p ON p.id = c.project_id
+      WHERE c.id = ${clip_id} AND c.project_id = ${project_id} AND p.user_id = ${user.id}
+    `;
+    if (!owned) {
+      return Response.json({ error: 'Clip not found' }, { status: 404 });
+    }
+
     const [job] = await sql`
-      INSERT INTO publish_jobs (clip_id, project_id, platform, caption, hashtags, scheduled_at, status)
-      VALUES (${clip_id}, ${project_id}, ${platform}, ${caption || null}, ${hashtags || []}, ${scheduled_at || null}, ${scheduled_at ? 'scheduled' : 'queued'})
+      INSERT INTO publish_jobs (user_id, clip_id, project_id, platform, caption, hashtags, scheduled_at, status)
+      VALUES (${user.id}, ${clip_id}, ${project_id}, ${platform}, ${caption || null}, ${hashtags || []}, ${scheduled_at || null}, ${scheduled_at ? 'scheduled' : 'queued'})
       RETURNING *
     `;
 

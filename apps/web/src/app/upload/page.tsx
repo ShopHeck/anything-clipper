@@ -26,6 +26,45 @@ const STAGES: { key: Stage; label: string; icon: typeof Upload }[] = [
   { key: 'done', label: 'Ready to edit', icon: CheckCircle },
 ];
 
+// XHR upload with progress callbacks (fetch can't report upload progress).
+function uploadWithProgress(
+  method: 'POST' | 'PUT',
+  url: string,
+  file: File,
+  onProgress: (loaded: number, total: number) => void
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+    xhr.upload.onprogress = (evt) => {
+      if (evt.lengthComputable) onProgress(evt.loaded, evt.total);
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText);
+      } else {
+        let errMsg = `Upload failed (${xhr.status})`;
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data.error) errMsg = data.error;
+        } catch {
+          /* ignore */
+        }
+        reject(new Error(errMsg));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during upload. Check your connection.'));
+    xhr.ontimeout = () =>
+      reject(new Error('Upload timed out. Try a smaller file or faster connection.'));
+    xhr.timeout = 600_000; // 10 min
+    xhr.send(file);
+  });
+}
+
 export default function UploadPage() {
   const router = useRouter();
 
@@ -136,55 +175,56 @@ export default function UploadPage() {
           });
         }
 
-        // Upload the file via XHR for real progress tracking
+        // Upload — direct to durable object storage when configured,
+        // falling back to the legacy AssemblyAI proxy endpoint otherwise.
         let fileUrl = urlName;
+        let storageKey: string | null = null;
         if (file) {
-          setStatusDetail('Uploading to transcription service…');
           setProgress(2);
+          const onProgress = (loaded: number, total: number) => {
+            const pct = Math.round((loaded / total) * 22); // 0-22%
+            setProgress(2 + pct);
+            const mb = (loaded / 1024 / 1024).toFixed(1);
+            const totalMb = (total / 1024 / 1024).toFixed(1);
+            setStatusDetail(`Uploading ${mb} / ${totalMb} MB…`);
+          };
 
-          fileUrl = await new Promise<string>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/upload-video', true);
-            xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-
-            xhr.upload.onprogress = (evt) => {
-              if (evt.lengthComputable) {
-                const pct = Math.round((evt.loaded / evt.total) * 22); // 0-22%
-                setProgress(2 + pct);
-                const mb = (evt.loaded / 1024 / 1024).toFixed(1);
-                const totalMb = (evt.total / 1024 / 1024).toFixed(1);
-                setStatusDetail(`Uploading ${mb} / ${totalMb} MB…`);
-              }
-            };
-
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                  const data = JSON.parse(xhr.responseText);
-                  if (data.url) resolve(data.url);
-                  else reject(new Error(data.error || 'Upload succeeded but returned no URL.'));
-                } catch {
-                  reject(new Error('Invalid response from upload server.'));
-                }
-              } else {
-                let errMsg = `Upload failed (${xhr.status})`;
-                try {
-                  const data = JSON.parse(xhr.responseText);
-                  if (data.error) errMsg = data.error;
-                } catch {
-                  /* ignore */
-                }
-                reject(new Error(errMsg));
-              }
-            };
-
-            xhr.onerror = () =>
-              reject(new Error('Network error during upload. Check your connection.'));
-            xhr.ontimeout = () =>
-              reject(new Error('Upload timed out. Try a smaller file or faster connection.'));
-            xhr.timeout = 300_000; // 5 min
-            xhr.send(file);
+          const presignRes = await fetch('/api/media/presign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: file.name, contentType: file.type }),
           });
+
+          if (presignRes.ok) {
+            setStatusDetail('Uploading to secure storage…');
+            const { uploadUrl, readUrl, key } = await presignRes.json();
+            await uploadWithProgress('PUT', uploadUrl, file, onProgress);
+            fileUrl = readUrl;
+            storageKey = key;
+          } else if (presignRes.status === 401) {
+            throw new Error('Please sign in to upload videos.');
+          } else if (presignRes.status === 429) {
+            const data = await presignRes.json().catch(() => ({}));
+            throw new Error(data.error || 'Upload limit reached. Try again later.');
+          } else {
+            // Storage not configured on this deployment (501) — legacy path.
+            setStatusDetail('Uploading to transcription service…');
+            const responseText = await uploadWithProgress(
+              'POST',
+              '/api/upload-video',
+              file,
+              onProgress
+            );
+            try {
+              const data = JSON.parse(responseText);
+              if (!data.url) throw new Error(data.error || 'Upload returned no URL.');
+              fileUrl = data.url;
+            } catch (parseErr) {
+              throw parseErr instanceof Error
+                ? parseErr
+                : new Error('Invalid response from upload server.');
+            }
+          }
         }
         setProgress(25);
 
@@ -257,6 +297,7 @@ export default function UploadPage() {
               title: (file ? file.name : urlName).replace(/\.[^/.]+$/, ''),
               file_name: file ? file.name : urlName,
               file_url: fileUrl,
+              storage_key: storageKey,
               status: 'ready',
             }),
           });

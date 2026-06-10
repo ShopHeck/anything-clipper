@@ -1,6 +1,10 @@
+import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -30,11 +34,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return Response.json({ error: 'Nothing to update' }, { status: 400 });
     }
 
-    values.push(id);
+    values.push(id, user.id);
     const [job] = await sql(
-      `UPDATE publish_jobs SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
+      `UPDATE publish_jobs SET ${setClauses.join(', ')} WHERE id = $${idx} AND user_id = $${idx + 1} RETURNING *`,
       values
     );
+
+    if (!job) {
+      return Response.json({ error: 'Publish job not found' }, { status: 404 });
+    }
 
     return Response.json({ job });
   } catch (error) {
@@ -43,10 +51,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   try {
     const { id } = await params;
-    await sql`DELETE FROM publish_jobs WHERE id = ${id}`;
+    await sql`DELETE FROM publish_jobs WHERE id = ${id} AND user_id = ${user.id}`;
     return Response.json({ success: true });
   } catch (error) {
     console.error('Delete publish job error:', error);

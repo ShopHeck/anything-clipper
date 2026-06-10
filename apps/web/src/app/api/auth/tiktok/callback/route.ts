@@ -1,8 +1,17 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
+import { getApiUser } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
 
 export async function GET(req: NextRequest) {
+  // The OAuth redirect arrives in the user's browser, so their session
+  // cookie is present — the connection must be saved under their account.
+  const user = await getApiUser(req);
+  if (!user) {
+    const appUrl = process.env.NEXT_PUBLIC_CREATE_APP_URL ?? '';
+    return Response.redirect(`${appUrl}/publish?tiktok_error=not_signed_in`);
+  }
+
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
   const state = searchParams.get('state');
@@ -119,10 +128,10 @@ export async function GET(req: NextRequest) {
   try {
     await sql`
       INSERT INTO platform_connections
-        (platform, username, avatar_url, followers_count, access_token, refresh_token, open_id, expires_at)
+        (user_id, platform, username, avatar_url, followers_count, access_token, refresh_token, open_id, expires_at)
       VALUES
-        ('TikTok', ${displayName}, ${avatarUrl}, ${followerCount}, ${accessToken}, ${refreshToken}, ${openId}, ${expiresAt})
-      ON CONFLICT (platform) DO UPDATE SET
+        (${user.id}, 'TikTok', ${displayName}, ${avatarUrl}, ${followerCount}, ${accessToken}, ${refreshToken}, ${openId}, ${expiresAt})
+      ON CONFLICT (user_id, platform) DO UPDATE SET
         username        = EXCLUDED.username,
         avatar_url      = EXCLUDED.avatar_url,
         followers_count = EXCLUDED.followers_count,

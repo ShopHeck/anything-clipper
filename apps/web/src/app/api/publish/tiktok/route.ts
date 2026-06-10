@@ -1,17 +1,23 @@
+import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
+import { getFreshTikTokToken, getTikTokConnection } from '@/app/api/utils/tiktok';
 
 /**
  * POST /api/publish/tiktok
  * Body: { jobId: string }
  *
  * Full flow:
- *  1. Load publish job + clip + project (to get video URL)
- *  2. Load TikTok connection — auto-refresh token if near expiry
- *  3. Initiate TikTok PULL_FROM_URL post
- *  4. Poll publish status until complete or failed (max 60 s)
+ *  1. Load the caller's publish job + clip + project
+ *  2. Load the caller's TikTok connection — auto-refresh token if near expiry
+ *  3. Initiate TikTok PULL_FROM_URL post with the RENDERED clip (never the
+ *     raw source video)
+ *  4. Poll publish status until complete or failed (max 90 s)
  *  5. Save result back to publish_jobs
  */
 export async function POST(request: Request) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
   let jobId: string;
   try {
     const body = await request.json();
@@ -21,7 +27,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'jobId is required' }, { status: 400 });
   }
 
-  // ── 1. Load job, clip, and project ───────────────────────
+  // ── 1. Load job, clip, and project (caller's only) ───────
   const [row] = await sql`
     SELECT
       pj.id            AS job_id,
@@ -34,11 +40,11 @@ export async function POST(request: Request) {
       c.title          AS clip_title,
       c.start_time,
       c.end_time,
-      p.file_url       AS video_url
+      c.rendered_url
     FROM publish_jobs pj
     JOIN clips    c ON c.id = pj.clip_id AND c.project_id = pj.project_id
     JOIN projects p ON p.id = pj.project_id
-    WHERE pj.id = ${jobId}
+    WHERE pj.id = ${jobId} AND pj.user_id = ${user.id} AND p.user_id = ${user.id}
     LIMIT 1
   `;
 
@@ -54,47 +60,26 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Already published' }, { status: 409 });
   }
 
-  if (!row.video_url) {
-    return Response.json({ error: 'No video URL on this project' }, { status: 422 });
+  // Guard: only the rendered, trimmed MP4 may be posted. Publishing the raw
+  // source would upload the entire original video instead of the clip.
+  if (!row.rendered_url) {
+    return Response.json(
+      {
+        error:
+          'This clip has not been rendered yet. Export the clip first so the trimmed video — not the full source — gets posted.',
+      },
+      { status: 422 }
+    );
   }
 
   // Mark as processing
   await sql`UPDATE publish_jobs SET status = 'processing', error_msg = NULL WHERE id = ${jobId}`;
 
-  // ── 2. Load & maybe refresh TikTok token ─────────────────
-  const [conn] = await sql`
-    SELECT access_token, refresh_token, expires_at
-    FROM platform_connections
-    WHERE platform = 'TikTok'
-    LIMIT 1
-  `;
-
-  if (!conn?.access_token) {
+  // ── 2. Load & maybe refresh the caller's TikTok token ────
+  const accessToken = await getFreshTikTokToken(user.id);
+  if (!accessToken) {
     await sql`UPDATE publish_jobs SET status = 'failed', error_msg = 'No TikTok connection found' WHERE id = ${jobId}`;
     return Response.json({ error: 'TikTok not connected' }, { status: 403 });
-  }
-
-  let accessToken: string = conn.access_token;
-
-  // Refresh if expires within 5 minutes
-  const expiresAt = conn.expires_at ? new Date(conn.expires_at) : null;
-  const fiveMinutes = 5 * 60 * 1000;
-  if (expiresAt && Date.now() + fiveMinutes > expiresAt.getTime()) {
-    try {
-      const refreshRes = await fetch(
-        `${process.env.NEXT_PUBLIC_CREATE_APP_URL}/api/auth/tiktok/refresh`,
-        { method: 'POST' }
-      );
-      if (refreshRes.ok) {
-        // Reload token after refresh
-        const [fresh] = await sql`
-          SELECT access_token FROM platform_connections WHERE platform = 'TikTok' LIMIT 1
-        `;
-        if (fresh?.access_token) accessToken = fresh.access_token;
-      }
-    } catch (err) {
-      console.error('Token refresh warning (continuing with existing token):', err);
-    }
   }
 
   // ── 3. Build caption + hashtags ──────────────────────────
@@ -125,7 +110,7 @@ export async function POST(request: Request) {
         },
         source_info: {
           source: 'PULL_FROM_URL',
-          video_url: row.video_url,
+          video_url: row.rendered_url,
         },
       }),
     });
@@ -178,11 +163,9 @@ export async function POST(request: Request) {
       if (status === 'PUBLISH_COMPLETE') {
         finalStatus = 'published';
         // TikTok doesn't return the post URL directly — construct profile link
-        const [tiktokConn] = await sql`
-          SELECT username, open_id FROM platform_connections WHERE platform = 'TikTok' LIMIT 1
-        `;
-        postUrl = tiktokConn?.username
-          ? `https://www.tiktok.com/@${tiktokConn.username}`
+        const conn = await getTikTokConnection(user.id);
+        postUrl = conn?.username
+          ? `https://www.tiktok.com/@${conn.username}`
           : 'https://www.tiktok.com';
         break;
       }
