@@ -1,0 +1,186 @@
+# Anything Clipper — Audit & Upgrade Plan
+
+**Goal:** turn the current prototype into an AI video editor + clipping product that
+beats CapCut (editing depth) and Opus Clip (long‑form → viral clips) on the dimensions
+that matter to creators.
+
+This document has three parts:
+
+1. **Audit** — what exists today and where it breaks.
+2. **Competitive bar** — what "better than CapCut/Opus Clip" actually requires.
+3. **Upgrade phases** — a sequenced roadmap, starting with the things that are
+   currently unsafe or broken.
+
+---
+
+## 1. Audit
+
+### 1.1 Architecture (as built)
+
+| Layer | Implementation |
+|---|---|
+| Monorepo | Yarn 4 workspaces — `apps/web`, `apps/mobile` |
+| Web | Next.js 16, React 19, Tailwind 4, TanStack Query |
+| Mobile | Expo 54 / React Native 0.81, expo-router, Skia, expo-video |
+| Auth | `better-auth` + Neon Postgres (`apps/web/src/lib/auth.ts`) |
+| DB access | Raw SQL via `@neondatabase/serverless` (`app/api/utils/sql.ts`) |
+| Transcription | AssemblyAI (`/api/transcribe`, `/api/transcribe/[id]`) |
+| LLM | GPT via the "Anything" proxy (`/integrations/chat-gpt/conversationgpt4`) |
+| Publishing | TikTok PULL_FROM_URL (`/api/publish/tiktok`) |
+| "Editor export" | Client-side `canvas.captureStream()` + `MediaRecorder` |
+
+The data model (inferred from SQL, **no migrations in repo**): `projects`,
+`transcript_segments`, `clips`, `publish_jobs`, `platform_connections`.
+
+### 1.2 Critical issues (fix before anything else)
+
+**C1 — Multi-tenant data leak (security, severe).**
+No data API route verifies the session or scopes by user.
+- `GET /api/projects` returns *every* project in the database (`app/api/projects/route.ts`).
+- `projects/[id]`, `clips`, `transcript_segments` have no `user_id` filter — any user can
+  read or mutate any project by ID.
+- `platform_connections` is read as `WHERE platform = 'TikTok' LIMIT 1`
+  (`app/api/publish/tiktok/route.ts`) — a **single global TikTok account** is shared by
+  all users. Any user can publish through whoever connected first.
+
+**C2 — No real video pipeline.** `handleExport` in `app/editor/[id]/page.tsx`:
+- Records in **real time** via `MediaRecorder` — a 10‑minute source takes 10 minutes to
+  export, and the loop runs for `totalDuration` (the **whole video**), not the selected
+  clip's start/end.
+- Outputs **WebM** on most browsers (TikTok/IG want MP4/H.264) → needs a re-encode that
+  doesn't exist.
+- Frame draw is `requestAnimationFrame`, which throttles when the tab loses focus →
+  dropped frames / corrupt timing.
+- `createMediaElementSource` can only be called once per element → re‑export in the same
+  session throws. Fails on Safari/iOS.
+- Cannot run on mobile, cannot batch, cannot scale.
+
+**C3 — Publishing posts the wrong asset.** `/api/publish/tiktok` pulls `projects.file_url`
+(the **full original** upload) and never trims to `clips.start_time/end_time`. Every "clip"
+publish posts the entire source video.
+
+**C4 — No durable media storage.** The source video is only an in-memory
+`URL.createObjectURL` blob held in a module singleton (`utils/videoStore.ts`); a reload
+loses it. `file_url` points at the AssemblyAI **upload** endpoint — intended as
+transcription input, not a public CDN, and not a reliable origin for TikTok's pull servers.
+
+**C5 — Open, unmetered AI endpoints.** `generate-clips`, `analyze-virality`, `ai-suggest`,
+`generate-hook` are unauthenticated POSTs that call a **paid** GPT integration. No auth,
+no rate limit, no usage metering → direct cost-abuse vector.
+
+**C6 — Fake fallback clips erode trust.** On any error, `/api/generate-clips` and
+`/api/analyze-virality` return **hardcoded** clips/scores with invented timestamps that
+don't match the user's video. Users see confident "94 viral score" results for content
+that was never analyzed.
+
+### 1.3 Product gaps vs. competitors
+
+- **Shallow analysis window.** Transcript is truncated to 2000 chars for clip generation
+  and 800 for scoring — only the first ~5 minutes of a video is ever considered. Long
+  podcasts/webinars (Opus Clip's core use case) are mostly ignored.
+- **Unaligned clip boundaries.** GPT returns `segmentStart/segmentEnd` that aren't
+  reconciled with AssemblyAI word timestamps, so cuts land mid-word/mid-sentence.
+- **Heuristic virality.** Scoring is English-only regex keyword matching (`scoreSegmentsLocally`)
+  — gameable and not calibrated to real engagement.
+- **No active-speaker reframing.** Export does a static center-crop; competitors track the
+  speaker's face and keyframe the crop.
+- **Crude captions.** One word at fixed 80% height, two hardcoded styles, drawn live during
+  recording. No karaoke word-highlight timing, emoji, positioning, editable text, animation
+  presets, translation, or SRT/VTT export.
+- **No silence/filler removal, no scene detection, no B-roll, no real zoom/speed effects** —
+  even though the AI "recommends" them.
+- **Speaker diarization disabled** (`speaker_labels: false`).
+- **Half-wired upload** (`utils/useUpload.ts` — Uploadcare client commented out, throws).
+- **No tests for web/AI logic, no CI, no DB migrations.**
+
+---
+
+## 2. Competitive bar
+
+| Capability | Opus Clip | CapCut | Anything (today) |
+|---|---|---|---|
+| Long-form → auto clips | ✅ | ➖ | ⚠️ first ~5 min only |
+| Calibrated virality score | ✅ | ❌ | ⚠️ regex heuristic |
+| Active-speaker auto-reframe | ✅ | ✅ | ❌ static crop |
+| Animated/karaoke captions | ✅ | ✅ (70+ langs) | ⚠️ one word, 2 styles |
+| Server render → MP4 | ✅ | ✅ (cloud) | ❌ client WebM, real-time |
+| Trim to clip on export/publish | ✅ | ✅ | ❌ exports whole video |
+| Multi-track timeline editor | ➖ | ✅ | ❌ |
+| B-roll / stock / effects | ✅ | ✅ | ❌ |
+| Multi-platform publish + schedule | ✅ | ➖ | ⚠️ TikTok only, untrimmed |
+| Translation / dubbing | ✅ | ✅ | ❌ |
+| Per-user data isolation & billing | ✅ | ✅ | ❌ |
+
+**Where we can win:** a single product that does Opus-grade auto-clipping **and**
+CapCut-grade manual editing on the same timeline, with a server render farm so it works
+identically on web and mobile.
+
+---
+
+## 3. Upgrade phases
+
+Estimates assume a small team. Each phase ends in a shippable state.
+
+### Phase 0 — Stop the bleeding (security & correctness) · ~1–2 weeks
+Non-negotiable; everything else builds on this.
+
+- **Enforce auth + user scoping on every data route.** Resolve the session
+  (`auth.api.getSession`), add `user_id` to `projects` / `clips` / `transcript_segments` /
+  `publish_jobs` / `platform_connections`, and filter every query by it. (Fixes **C1**.)
+- **Scope `platform_connections` per user**; never share one TikTok token globally. (**C1**)
+- **Authenticate + rate-limit + meter** all AI endpoints; reject anonymous calls. (**C5**)
+- **Replace fake fallback clips** with an honest error state (or a clearly-labeled demo). (**C6**)
+- **Block publishing untrimmed clips** until the render pipeline lands (interim guard). (**C3**)
+- **Add a real media bucket** (Cloudflare R2 / S3 / Mux). Upload the source there on import;
+  store the durable URL as `file_url`; keep AssemblyAI strictly as a transcription input. (**C4**)
+- **Land the DB schema as migrations** (Drizzle/Prisma or SQL files) and a CI typecheck/test job.
+
+### Phase 1 — Real video engine · ~3–6 weeks
+The single highest-leverage change. (Fixes **C2/C3**.)
+
+- **Server-side render service.** A job queue (e.g. a worker + Redis/SQS) running **FFmpeg**
+  workers — or a managed renderer (Mux, Shotstack, or Remotion Lambda) to start.
+- **Render spec per clip:** trim to `start/end`, H.264 MP4, target ratio (9:16 / 1:1 / 16:9),
+  burned captions, reframe crop, music mix, loudness normalization.
+- **Editor flow becomes:** "submit render job → poll status → download / publish MP4."
+  Replace the `MediaRecorder` path.
+- **Keep an instant client preview** via WebCodecs (no download), while the server produces
+  the final asset — best of both.
+
+### Phase 2 — AI clipping that beats Opus Clip · ~3–6 weeks
+- **Full-transcript analysis** via map-reduce chunking — remove the 2000/800-char truncation.
+- **Word-timestamp-aligned boundaries** — snap clip start/end to sentence and silence
+  boundaries from AssemblyAI words.
+- **Stronger virality model:** LLM scoring fused with structural signals (hook density,
+  question/stat presence, retention proxies), calibrated, multi-language.
+- **Enable diarization + silence/scene detection;** auto-remove filler words and dead air.
+- **Active-speaker auto-reframe:** per-frame face/landmark detection → dynamic crop keyframes
+  fed into the render spec.
+
+### Phase 3 — Caption & effects parity with CapCut · ~3–5 weeks
+- **Karaoke word-highlight captions** from word timestamps; template library; emoji;
+  positioning; editable caption text.
+- **Translation + subtitle export** (SRT/VTT) and optional **TTS dubbing**.
+- **Effects that actually render:** zoom punch-ins, speed ramps, transitions, auto B-roll /
+  stock, background removal.
+- **Multi-track timeline editor** UI (video / captions / music / B-roll).
+
+### Phase 4 — Growth & monetization · ongoing
+- **Multi-platform publish** (Instagram Reels, YouTube Shorts, X) + **scheduling** + posted-clip
+  **analytics**.
+- **Brand kits / templates**, teams & collaboration.
+- **Usage metering + billing** (Stripe credits) wired to the Phase 0 metering.
+- **Observability:** render-job dashboard, error tracking, cost monitoring.
+
+---
+
+## Suggested first PRs (Phase 0)
+
+1. `auth-scoping`: session check + `user_id` filter on all data routes; migration adding
+   `user_id` columns and indexes.
+2. `media-storage`: R2/S3 upload on import; durable `file_url`; signed playback URLs.
+3. `ai-guardrails`: auth + rate limit + usage metering on AI routes; remove fake fallbacks.
+4. `schema-and-ci`: migrations + a CI job running typecheck and tests.
+
+> Recommendation: start with PRs #1 and #3 — they close the security holes — then #2, which
+> unblocks the Phase 1 render engine.
