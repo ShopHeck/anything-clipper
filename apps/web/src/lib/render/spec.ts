@@ -2,6 +2,8 @@
 //  - 'clip':     trim to one AI clip's start/end (what gets published)
 //  - 'timeline': the whole project with deleted segments removed (editor export)
 import sql from '@/app/api/utils/sql';
+import { groupWordsIntoLines } from '@/lib/captions/ass';
+import { translateLines, translatedLinesToWords } from '@/lib/captions/translate';
 import { presignDownload, storageConfigured } from '@/app/api/utils/storage';
 import { AspectRatio, CutRange, RenderSpec, SpecWord } from './types';
 
@@ -11,6 +13,8 @@ export interface RenderRequestOptions {
   ratio?: AspectRatio;
   captionTemplateId?: string | null; // null disables captions
   captionPosition?: 'bottom' | 'center' | 'top';
+  // When set, captions are translated into this language and burned in.
+  captionLanguage?: string | null;
   music?: { url: string; volume: number } | null;
   zoomKeyframes?: Array<{ t: number; scale: number }>;
   cropKeyframes?: Array<{ t: number; x: number }>;
@@ -109,10 +113,20 @@ export async function buildRenderSpec(
     .filter((s) => s.is_deleted)
     .map((s) => ({ start: s.start_time, end: s.end_time }));
 
-  const words: SpecWord[] =
+  let words: SpecWord[] =
     Array.isArray(project.transcript_words) && project.transcript_words.length > 0
       ? project.transcript_words
       : synthesizeWordsFromSegments(segments);
+
+  // Translate caption text (timing preserved) when a target language is set.
+  if (opts.captionTemplateId !== null && opts.captionLanguage && words.length > 0) {
+    try {
+      const translated = await translateLines(groupWordsIntoLines(words), opts.captionLanguage);
+      words = translatedLinesToWords(translated);
+    } catch (err) {
+      console.error('Caption translation failed; falling back to original:', err);
+    }
+  }
 
   const spec: RenderSpec = {
     sourceUrl,

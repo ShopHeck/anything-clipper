@@ -220,6 +220,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   // Editor UI
   const [panel, setPanel] = useState<Panel>('transcript');
   const [captionStyleId, setCaptionStyleId] = useState('mrBeast');
+  const [captionLanguage, setCaptionLanguage] = useState('');
+  const [subtitleBusy, setSubtitleBusy] = useState(false);
   const [selectedPlatforms, setSelectedPlatforms] = useState(['tiktok', 'reels', 'shorts']);
   const [exportRatio, setExportRatio] = useState<Ratio>('9:16');
   const [colorGrade, setColorGrade] = useState('cinema');
@@ -487,6 +489,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           mode: 'timeline',
           ratio: exportRatio,
           captionTemplateId: captionStyleId,
+          captionLanguage: captionLanguage || null,
           music: track && musicPlaying ? { url: track.url, volume: musicVolume } : null,
         }),
       });
@@ -530,6 +533,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     projectId,
     exportRatio,
     captionStyleId,
+    captionLanguage,
     fileName,
     selectedTrack,
     musicPlaying,
@@ -541,6 +545,41 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     setExportStatus('idle');
     setExportProgress(0);
   }, []);
+
+  // Download an SRT/VTT subtitle file, optionally translated, built from the
+  // project's word timestamps on the server.
+  const downloadSubtitles = useCallback(
+    async (format: 'srt' | 'vtt') => {
+      if (!projectId || projectId === 'new') {
+        alert('Save this project first (re-upload) to export subtitles.');
+        return;
+      }
+      setSubtitleBusy(true);
+      try {
+        const qs = new URLSearchParams({ format });
+        if (captionLanguage) qs.set('lang', captionLanguage);
+        const res = await fetch(`/api/projects/${projectId}/subtitles?${qs.toString()}`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Could not build subtitles (${res.status})`);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `captions${captionLanguage ? `.${captionLanguage.toLowerCase()}` : ''}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'Subtitle export failed');
+      } finally {
+        setSubtitleBusy(false);
+      }
+    },
+    [projectId, captionLanguage]
+  );
 
   // ── AI suggestion ────────────────────────────────────────
   const getAISuggestion = useCallback(async () => {
@@ -1202,24 +1241,63 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                     </button>
                   );
                 })}
-                <div className="border-t border-white/5 pt-3 space-y-2.5">
+                <div className="border-t border-white/5 pt-3 space-y-3">
                   <p className="text-[9px] font-bold text-white/35 uppercase tracking-widest">
-                    Caption Settings
+                    Subtitles & Translation
                   </p>
-                  {[
-                    ['Animation', 'Word-by-word'],
-                    ['Position', 'Bottom 20%'],
-                    ['Max words/frame', '3 words'],
-                    ['Emoji boost', 'Auto'],
-                  ].map(([l, v]) => (
-                    <div key={l} className="flex items-center justify-between">
-                      <span className="text-[10px] text-white/42">{l}</span>
-                      <button className="flex items-center gap-1 text-[10px] bg-white/6 border border-white/8 text-white/55 px-2.5 py-1 rounded-lg hover:bg-white/10 transition-all">
-                        {v}
-                        <ChevronDown size={9} />
-                      </button>
-                    </div>
-                  ))}
+
+                  <div>
+                    <label className="text-[10px] text-white/42 block mb-1.5">
+                      Burn captions in language
+                    </label>
+                    <select
+                      value={captionLanguage}
+                      onChange={(e) => setCaptionLanguage(e.target.value)}
+                      className="w-full bg-white/6 border border-white/10 text-white/75 text-[11px] px-2.5 py-2 rounded-lg focus:border-violet-500/50 outline-none"
+                    >
+                      <option value="">Original language</option>
+                      {[
+                        'Spanish',
+                        'Portuguese',
+                        'French',
+                        'German',
+                        'Hindi',
+                        'Arabic',
+                        'Japanese',
+                        'Korean',
+                        'Chinese',
+                      ].map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[9px] text-white/25 mt-1">
+                      Applies to the exported video and the subtitle files below.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => downloadSubtitles('srt')}
+                      disabled={subtitleBusy || projectId === 'new'}
+                      className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-white/6 border border-white/10 text-white/70 px-2 py-2 rounded-lg hover:bg-white/10 transition-all disabled:opacity-40"
+                    >
+                      <Download size={11} />
+                      .SRT
+                    </button>
+                    <button
+                      onClick={() => downloadSubtitles('vtt')}
+                      disabled={subtitleBusy || projectId === 'new'}
+                      className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-white/6 border border-white/10 text-white/70 px-2 py-2 rounded-lg hover:bg-white/10 transition-all disabled:opacity-40"
+                    >
+                      <Download size={11} />
+                      .VTT
+                    </button>
+                  </div>
+                  {subtitleBusy && (
+                    <p className="text-[9px] text-violet-300/70">Building subtitles…</p>
+                  )}
                 </div>
               </div>
             )}

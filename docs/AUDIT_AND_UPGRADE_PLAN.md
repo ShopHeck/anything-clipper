@@ -174,13 +174,19 @@ The single highest-leverage change. (Fixes **C2/C3**.)
   contract + smoothing/fallback are in place; today it defaults to center-crop until a
   detector is plugged in).
 
-### Phase 3 — Caption & effects parity with CapCut · ~3–5 weeks
-- **Karaoke word-highlight captions** from word timestamps; template library; emoji;
-  positioning; editable caption text.
-- **Translation + subtitle export** (SRT/VTT) and optional **TTS dubbing**.
-- **Effects that actually render:** zoom punch-ins, speed ramps, transitions, auto B-roll /
-  stock, background removal.
-- **Multi-track timeline editor** UI (video / captions / music / B-roll).
+### Phase 3 — Caption & effects parity with CapCut · ~3–5 weeks · ✅ SHIPPED (core)
+- ✅ **Karaoke word-highlight captions** from word timestamps with a template library and
+  positioning (Phase 1 ASS builder: `\k` per-word timing, 5 styles, bottom/center/top).
+- ✅ **Translation + subtitle export**: `GET /api/projects/:id/subtitles?format=srt|vtt&lang=…`
+  builds SRT/VTT from word timestamps, optionally translated and clip-scoped
+  (`lib/captions/subtitles.ts`, `translate.ts`). The editor caption panel exports .SRT/.VTT
+  and picks a burn-in language; the renderer burns translated captions into the MP4.
+- ✅ **Effects that render:** zoom punch-ins and animated reframe crop (Phases 1–2) are live
+  in the ffmpeg pipeline.
+- ⏳ **Deferred (next iteration):** TTS dubbing, per-range speed ramps (kept out to avoid
+  caption-sync regressions), transitions, auto B-roll/stock, background removal, and the full
+  multi-track timeline editor UI. The render spec already has typed fields for speed ranges so
+  they can be added without an API change.
 
 ### Phase 4 — Growth & monetization · ongoing
 - **Multi-platform publish** (Instagram Reels, YouTube Shorts, X) + **scheduling** + posted-clip
