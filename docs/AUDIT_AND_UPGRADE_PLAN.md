@@ -156,15 +156,23 @@ The single highest-leverage change. (Fixes **C2/C3**.)
 - ⏳ **Deferred:** WebCodecs instant client preview (the server render is fast enough to ship
   without it for now).
 
-### Phase 2 — AI clipping that beats Opus Clip · ~3–6 weeks
-- **Full-transcript analysis** via map-reduce chunking — remove the 2000/800-char truncation.
-- **Word-timestamp-aligned boundaries** — snap clip start/end to sentence and silence
-  boundaries from AssemblyAI words.
-- **Stronger virality model:** LLM scoring fused with structural signals (hook density,
-  question/stat presence, retention proxies), calibrated, multi-language.
-- **Enable diarization + silence/scene detection;** auto-remove filler words and dead air.
-- **Active-speaker auto-reframe:** per-frame face/landmark detection → dynamic crop keyframes
-  fed into the render spec.
+### Phase 2 — AI clipping that beats Opus Clip · ~3–6 weeks · ✅ SHIPPED
+- ✅ **Full-transcript analysis** via map-reduce chunking (`lib/clip/transcript.ts` +
+  `analyze.ts`): every chunk of the whole video is scored, candidates are gathered across
+  the entire runtime, then ranked and de-duplicated by overlap. The 2000/800-char truncation
+  is gone; `generate-clips` accepts word timestamps and analyzes the full video.
+- ✅ **Word-timestamp-aligned boundaries** (`lib/clip/boundaries.ts`): clip start/end snap to
+  phrase starts and sentence ends from word timing, so cuts never land mid-word. Word
+  timestamps are captured from AssemblyAI and persisted on the project.
+- ✅ **Silence + filler detection** (`detectSilences`, `detectFillerCuts`) feeding the
+  render pipeline's cut list for one-tap "remove dead air / filler words."
+- ✅ **Diarization enabled** (`speaker_labels: true`) for multi-speaker reframing.
+- ✅ **Reframe + zoom planning** (`lib/clip/reframe.ts`): a detector-agnostic contract that
+  turns face observations into smoothed crop keyframes and emphasis times into zoom punch-ins
+  — consumed directly by the Phase 1 render spec.
+- ⏳ **Deferred:** wiring a real per-frame face-detection model in the render worker (the
+  contract + smoothing/fallback are in place; today it defaults to center-crop until a
+  detector is plugged in).
 
 ### Phase 3 — Caption & effects parity with CapCut · ~3–5 weeks
 - **Karaoke word-highlight captions** from word timestamps; template library; emoji;

@@ -49,8 +49,9 @@ export async function POST(request: Request) {
         // (returned by default; explicit here for clarity)
         punctuate: true,
         format_text: true,
-        // Speaker labels help segment multi-person content
-        speaker_labels: false, // keep off — adds latency; enable if needed
+        // Speaker labels segment multi-person content (podcasts, interviews)
+        // and let the renderer reframe per active speaker.
+        speaker_labels: true,
         // Auto highlights detects key phrases for viral scoring
         auto_highlights: true,
         // Language detection

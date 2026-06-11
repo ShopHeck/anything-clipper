@@ -266,16 +266,18 @@ export default function UploadPage() {
 
         const transcriptText = (transcribeResult.segments as Array<{ text: string }>)
           .map((s) => s.text)
-          .join(' ')
-          .slice(0, 1500);
+          .join(' ');
 
+        // Pass word-level timestamps so the whole video is analyzed and clip
+        // boundaries snap to real word/sentence edges (not the first ~5 min).
         const clipsRes = await fetch('/api/generate-clips', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            transcript: transcriptText,
+            transcript: transcriptText.slice(0, 4000),
             count: 6,
             segments: transcribeResult.segments,
+            words: (transcribeResult as { words?: unknown[] }).words ?? [],
           }),
         });
         if (!clipsRes.ok) throw new Error('Clip generation failed');

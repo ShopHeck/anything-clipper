@@ -1,11 +1,15 @@
 import { aiErrorResponse, chatCompletionJson } from '@/app/api/utils/ai';
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
+import { analyzeTranscript } from '@/lib/clip/analyze';
+import { TimedWord } from '@/lib/clip/boundaries';
+import { wordsFromSegments } from '@/lib/clip/transcript';
 
 interface InputSegment {
   id: string;
   start: number;
   end: number;
+  text?: string;
   viralScore?: number;
 }
 interface RawClip {
@@ -27,6 +31,13 @@ const THUMBNAILS = [
   'from-indigo-800 to-violet-900',
 ];
 
+function durationLabel(start: number, end: number): string {
+  const durationSec = Math.max(8, end - start);
+  const m = Math.floor(durationSec / 60);
+  const s = Math.round(durationSec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export async function POST(request: Request) {
   const user = await getApiUser(request);
   if (!user) return unauthorized();
@@ -43,10 +54,49 @@ export async function POST(request: Request) {
       transcript,
       count = 5,
       segments = [],
-    } = body as { transcript: string; count?: number; segments?: InputSegment[] };
+      words = [],
+    } = body as {
+      transcript: string;
+      count?: number;
+      segments?: InputSegment[];
+      words?: TimedWord[];
+    };
 
+    // Preferred path: full-transcript, word-accurate analysis over the WHOLE
+    // video. Use provided word timestamps, else synthesize from segments.
+    const timedWords: TimedWord[] =
+      words.length > 0
+        ? words
+        : segments.some((s) => s.text)
+          ? wordsFromSegments(
+              segments
+                .filter((s) => s.text)
+                .map((s) => ({ start: s.start, end: s.end, text: s.text as string }))
+            )
+          : [];
+
+    if (timedWords.length > 0) {
+      const candidates = await analyzeTranscript({ count, words: timedWords });
+      const clips = candidates.map((c, i) => ({
+        id: `clip-${i}`,
+        title: c.title,
+        hook: c.hook,
+        score: c.score,
+        platforms: c.platforms,
+        reason: c.reason,
+        keywords: c.keywords,
+        start: c.start,
+        end: c.end,
+        duration: durationLabel(c.start, c.end),
+        thumbnail: THUMBNAILS[i % THUMBNAILS.length],
+      }));
+      return Response.json({ clips });
+    }
+
+    // Fallback path: only plain transcript text available (e.g. "generate
+    // more" from the clips page) — single-shot analysis without timestamps.
     if (!transcript || transcript.trim().length === 0) {
-      return Response.json({ error: 'transcript is required' }, { status: 400 });
+      return Response.json({ error: 'transcript or words is required' }, { status: 400 });
     }
 
     const parsed = await chatCompletionJson<{ clips: RawClip[] }>(
@@ -57,7 +107,7 @@ export async function POST(request: Request) {
         },
         {
           role: 'user',
-          content: `Analyze this transcript and generate ${count} viral short-form clips (30–90 seconds each). For each clip: compelling title, punchy hook under 12 words, viral score 70–99, best platforms, reason why it works, and start/end seconds from the transcript.\n\nTranscript: "${transcript.slice(0, 2000)}"\n\n${segments.length > 0 ? `Segment timestamps: ${JSON.stringify(segments.map((s) => ({ id: s.id, start: s.start, end: s.end, viralScore: s.viralScore })))}` : ''}\n\nReturn exactly ${count} clips.`,
+          content: `Analyze this transcript and generate ${count} viral short-form clips (30–90 seconds each). For each clip: compelling title, punchy hook under 12 words, viral score 70–99, best platforms, reason why it works, and start/end seconds from the transcript.\n\nTranscript: "${transcript.slice(0, 4000)}"\n\nReturn exactly ${count} clips.`,
         },
       ],
       {
@@ -98,9 +148,8 @@ export async function POST(request: Request) {
     );
 
     const clips = parsed.clips.map((c: RawClip, i: number) => {
-      const durationSec = Math.max(15, (c.segmentEnd || 60) - (c.segmentStart || 0));
-      const m = Math.floor(durationSec / 60);
-      const s = Math.round(durationSec % 60);
+      const start = c.segmentStart || 0;
+      const end = c.segmentEnd || 60;
       return {
         id: `clip-${i}`,
         title: c.title,
@@ -108,9 +157,9 @@ export async function POST(request: Request) {
         score: c.score,
         platforms: c.platforms,
         reason: c.reason,
-        start: c.segmentStart || 0,
-        end: c.segmentEnd || 60,
-        duration: `${m}:${s.toString().padStart(2, '0')}`,
+        start,
+        end,
+        duration: durationLabel(start, end),
         thumbnail: THUMBNAILS[i % THUMBNAILS.length],
       };
     });
