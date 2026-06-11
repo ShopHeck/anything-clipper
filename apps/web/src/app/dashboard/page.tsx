@@ -93,6 +93,11 @@ export default function DashboardPage() {
     quotas: Array<{ key: string; used: number; limit: number; unlimited: boolean }>;
   } | null>(null);
   const [upgrading, setUpgrading] = useState(false);
+  const [analytics, setAnalytics] = useState<{
+    publishedCount: number;
+    views: number;
+    likes: number;
+  } | null>(null);
 
   const startUpgrade = async () => {
     setUpgrading(true);
@@ -122,7 +127,18 @@ export default function DashboardPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setUsage(d))
       .catch(() => {});
+    fetch('/api/analytics')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setAnalytics(d.totals))
+      .catch(() => {});
   }, []);
+
+  const formatCount = (n: number) =>
+    n >= 1_000_000
+      ? `${(n / 1_000_000).toFixed(1)}M`
+      : n >= 1_000
+        ? `${(n / 1_000).toFixed(1)}K`
+        : String(n);
 
   const loadProjects = async () => {
     try {
@@ -168,7 +184,14 @@ export default function DashboardPage() {
     },
     { label: 'Hours processed', value: totalHours.toFixed(1), icon: Clock, change: 'All time' },
     { label: 'Avg viral score', value: avgScore || '—', icon: TrendingUp, change: 'AI scored' },
-    { label: 'Videos uploaded', value: String(projects.length), icon: Video, change: 'Total' },
+    analytics && analytics.publishedCount > 0
+      ? {
+          label: 'Views on posts',
+          value: formatCount(analytics.views),
+          icon: BarChart2,
+          change: `${analytics.publishedCount} published`,
+        }
+      : { label: 'Videos uploaded', value: String(projects.length), icon: Video, change: 'Total' },
   ];
 
   return (
