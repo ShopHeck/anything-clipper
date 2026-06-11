@@ -188,12 +188,22 @@ The single highest-leverage change. (Fixes **C2/C3**.)
   multi-track timeline editor UI. The render spec already has typed fields for speed ranges so
   they can be added without an API change.
 
-### Phase 4 — Growth & monetization · ongoing
-- **Multi-platform publish** (Instagram Reels, YouTube Shorts, X) + **scheduling** + posted-clip
-  **analytics**.
-- **Brand kits / templates**, teams & collaboration.
-- **Usage metering + billing** (Stripe credits) wired to the Phase 0 metering.
-- **Observability:** render-job dashboard, error tracking, cost monitoring.
+### Phase 4 — Growth & monetization · ongoing · ✅ SHIPPED (core)
+- ✅ **Plans + monthly quotas** (`lib/billing/plans.ts`, free/pro/business) enforced against
+  the Phase 0 `usage_events` ledger via `checkPlanQuota` on uploads, clip generation, renders,
+  and translations — returns HTTP 402 with an upgrade prompt when exceeded.
+- ✅ **Usage API + UI**: `GET /api/usage` summarizes the plan and this-month usage per quota;
+  the dashboard sidebar shows live plan + clip-generation usage.
+- ✅ **Scheduling**: `publish_jobs` with `scheduled_at` are picked up by
+  `POST /api/publish/run-scheduled` (worker-secret protected, `FOR UPDATE SKIP LOCKED` so
+  concurrent runners don't double-post) and `scripts/publish-scheduler.mjs`.
+- ✅ **Publish refactor for multi-platform**: TikTok publish core extracted to
+  `lib/publish/tiktok.ts` (shared by the interactive route + scheduler); other platforms
+  return a clear "not available yet" instead of mis-posting. Analytics columns
+  (views/likes/comments/shares) added to `publish_jobs`.
+- ⏳ **Deferred (next iteration):** Instagram Reels / YouTube Shorts / X OAuth + adapters,
+  Stripe checkout/webhooks to flip `user_plans` (the schema + plan gates are ready), posted-clip
+  analytics polling, brand kits, and teams/collaboration.
 
 ---
 

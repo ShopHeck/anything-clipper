@@ -4,6 +4,7 @@
 
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
+import { checkPlanQuota, quotaExceeded } from '@/app/api/utils/quota';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // 2 min for large uploads
@@ -11,6 +12,9 @@ export const maxDuration = 120; // 2 min for large uploads
 export async function POST(request: Request) {
   const user = await getApiUser(request);
   if (!user) return unauthorized();
+
+  const quota = await checkPlanQuota(user.id, 'upload.video');
+  if (quota && !quota.allowed) return quotaExceeded(quota);
 
   const limit = await consumeRateLimit(user.id, 'upload.video', {
     limit: 15,

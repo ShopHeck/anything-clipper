@@ -1,5 +1,6 @@
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
+import { checkPlanQuota, quotaExceeded } from '@/app/api/utils/quota';
 import {
   buildObjectKey,
   presignDownload,
@@ -21,6 +22,9 @@ export async function POST(request: Request) {
       { status: 501 }
     );
   }
+
+  const quota = await checkPlanQuota(user.id, 'media.presign');
+  if (quota && !quota.allowed) return quotaExceeded(quota);
 
   const limit = await consumeRateLimit(user.id, 'media.presign', {
     limit: 30,

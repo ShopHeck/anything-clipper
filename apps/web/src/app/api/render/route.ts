@@ -1,5 +1,6 @@
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
+import { checkPlanQuota, quotaExceeded } from '@/app/api/utils/quota';
 import sql from '@/app/api/utils/sql';
 import { buildRenderSpec, RenderRequestOptions } from '@/lib/render/spec';
 
@@ -11,6 +12,9 @@ import { buildRenderSpec, RenderRequestOptions } from '@/lib/render/spec';
 export async function POST(request: Request) {
   const user = await getApiUser(request);
   if (!user) return unauthorized();
+
+  const quota = await checkPlanQuota(user.id, 'render.create');
+  if (quota && !quota.allowed) return quotaExceeded(quota);
 
   const limit = await consumeRateLimit(user.id, 'render.create', {
     limit: 30,

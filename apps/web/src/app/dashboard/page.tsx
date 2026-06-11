@@ -88,10 +88,18 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [clientNow, setClientNow] = useState(0);
+  const [usage, setUsage] = useState<{
+    plan: { label: string };
+    quotas: Array<{ key: string; used: number; limit: number; unlimited: boolean }>;
+  } | null>(null);
 
   useEffect(() => {
     setClientNow(Date.now());
     loadProjects();
+    fetch('/api/usage')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setUsage(d))
+      .catch(() => {});
   }, []);
 
   const loadProjects = async () => {
@@ -184,20 +192,36 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-white truncate">ClipForge User</div>
-              <div className="text-xs text-white/35 truncate">Creator Plan</div>
+              <div className="text-xs text-white/35 truncate">
+                {usage ? `${usage.plan.label} Plan` : 'Creator Plan'}
+              </div>
             </div>
             <ChevronDown size={14} className="text-white/30 shrink-0" />
           </div>
-          <div className="mt-3 bg-gradient-to-r from-violet-600/20 to-pink-600/15 border border-violet-500/20 rounded-xl p-3">
-            <div className="text-xs font-semibold text-violet-300 mb-1">Clips generated</div>
-            <div className="h-1.5 bg-white/10 rounded-full mb-1.5">
-              <div
-                className="h-1.5 bg-gradient-to-r from-violet-500 to-pink-500 rounded-full"
-                style={{ width: `${Math.min(100, (totalClips / 500) * 100)}%` }}
-              />
-            </div>
-            <div className="text-xs text-white/35">{totalClips} of 500 clips</div>
-          </div>
+          {(() => {
+            // Show the clip-generation quota from the live usage summary,
+            // falling back to the local project clip count before it loads.
+            const clipQuota = usage?.quotas.find((q) => q.key === 'clipGenerationsPerMonth');
+            const used = clipQuota ? clipQuota.used : totalClips;
+            const limit = clipQuota && !clipQuota.unlimited ? clipQuota.limit : null;
+            const pct = limit ? Math.min(100, (used / limit) * 100) : 100;
+            return (
+              <div className="mt-3 bg-gradient-to-r from-violet-600/20 to-pink-600/15 border border-violet-500/20 rounded-xl p-3">
+                <div className="text-xs font-semibold text-violet-300 mb-1">
+                  Clip generations this month
+                </div>
+                <div className="h-1.5 bg-white/10 rounded-full mb-1.5">
+                  <div
+                    className="h-1.5 bg-gradient-to-r from-violet-500 to-pink-500 rounded-full"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="text-xs text-white/35">
+                  {limit ? `${used} of ${limit} used` : `${used} used · unlimited`}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </aside>
 

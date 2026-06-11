@@ -1,6 +1,7 @@
 import { aiErrorResponse, chatCompletionJson } from '@/app/api/utils/ai';
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
+import { checkPlanQuota, quotaExceeded } from '@/app/api/utils/quota';
 import { analyzeTranscript } from '@/lib/clip/analyze';
 import { TimedWord } from '@/lib/clip/boundaries';
 import { wordsFromSegments } from '@/lib/clip/transcript';
@@ -41,6 +42,9 @@ function durationLabel(start: number, end: number): string {
 export async function POST(request: Request) {
   const user = await getApiUser(request);
   if (!user) return unauthorized();
+
+  const quota = await checkPlanQuota(user.id, 'ai.generate-clips');
+  if (quota && !quota.allowed) return quotaExceeded(quota);
 
   const limit = await consumeRateLimit(user.id, 'ai.generate-clips', {
     limit: 30,
