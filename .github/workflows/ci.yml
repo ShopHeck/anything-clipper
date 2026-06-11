@@ -14,6 +14,8 @@ jobs:
         with:
           node-version: 22
       - run: corepack enable
+      - name: Install ffmpeg (render pipeline smoke tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install dependencies (web workspace)
         run: yarn workspaces focus web
       - name: Typecheck

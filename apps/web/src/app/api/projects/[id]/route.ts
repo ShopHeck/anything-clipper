@@ -70,6 +70,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       status,
       segments,
       clips,
+      transcript_words,
     } = body;
 
     // Build dynamic update
@@ -104,6 +105,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (status !== undefined) {
       setClauses.push(`status = $${idx++}`);
       values.push(status);
+    }
+    if (transcript_words !== undefined) {
+      setClauses.push(`transcript_words = $${idx++}`);
+      values.push(JSON.stringify(transcript_words));
     }
 
     setClauses.push(`updated_at = NOW()`);

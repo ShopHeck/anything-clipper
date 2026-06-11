@@ -135,17 +135,26 @@ Non-negotiable; everything else builds on this.
   store the durable URL as `file_url`; keep AssemblyAI strictly as a transcription input. (**C4**)
 - **Land the DB schema as migrations** (Drizzle/Prisma or SQL files) and a CI typecheck/test job.
 
-### Phase 1 — Real video engine · ~3–6 weeks
+### Phase 1 — Real video engine · ~3–6 weeks · ✅ SHIPPED
 The single highest-leverage change. (Fixes **C2/C3**.)
 
-- **Server-side render service.** A job queue (e.g. a worker + Redis/SQS) running **FFmpeg**
-  workers — or a managed renderer (Mux, Shotstack, or Remotion Lambda) to start.
-- **Render spec per clip:** trim to `start/end`, H.264 MP4, target ratio (9:16 / 1:1 / 16:9),
-  burned captions, reframe crop, music mix, loudness normalization.
-- **Editor flow becomes:** "submit render job → poll status → download / publish MP4."
-  Replace the `MediaRecorder` path.
-- **Keep an instant client preview** via WebCodecs (no download), while the server produces
-  the final asset — best of both.
+- ✅ **Server-side render service.** `render_jobs` queue (migration 0003) + an FFmpeg
+  processor (`lib/render/process.ts`). Runs inline via `POST /api/render/:id/process` or
+  through the standalone `scripts/render-worker.mjs` poller (secured by
+  `RENDER_WORKER_SECRET`), so it scales from a single box to a worker fleet without code
+  changes.
+- ✅ **Render spec per clip** (`lib/render/`): trim to `start/end`, cut out deleted/silent
+  segments, H.264 MP4, target ratio (9:16 / 1:1 / 16:9), **burned karaoke captions** (ASS
+  with per-word `\k` timing), animated reframe + zoom keyframes, music bed mix, and
+  `loudnorm` loudness normalization. Output uploaded to object storage; `clips.rendered_url`
+  is stamped so publishing posts the trimmed clip.
+- ✅ **Editor + clips flow** now "submit render job → poll progress → download MP4." The
+  real-time `MediaRecorder`/canvas capture path is gone.
+- ✅ **Time-domain correctness:** caption words and crop/zoom keyframes are mapped from
+  source time into output time after trims and cuts (`lib/render/time.ts`), so captions stay
+  in sync across removed regions. Covered by unit tests + an end-to-end ffmpeg smoke test.
+- ⏳ **Deferred:** WebCodecs instant client preview (the server render is fast enough to ship
+  without it for now).
 
 ### Phase 2 — AI clipping that beats Opus Clip · ~3–6 weeks
 - **Full-transcript analysis** via map-reduce chunking — remove the 2000/800-char truncation.

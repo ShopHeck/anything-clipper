@@ -313,6 +313,8 @@ export default function UploadPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 total_duration: transcribeResult.totalDuration || totalDuration,
+                transcript_words:
+                  (transcribeResult as { words?: unknown[] }).words ?? undefined,
                 viral_score: transcribeResult.overallScore || 80,
                 word_count: (transcribeResult.segments as Array<{ text: string }>).reduce(
                   (a, s) => a + s.text.split(' ').length,

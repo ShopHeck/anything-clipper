@@ -247,8 +247,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const wordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const effectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const exportFrameRef = useRef<number | null>(null);
+  const exportAbortRef = useRef(false);
 
   // ── Load from store + DB ─────────────────────────────────
   useEffect(() => {
@@ -463,199 +462,82 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     if (musicRef.current) musicRef.current.volume = musicVolume;
   }, [musicVolume]);
 
-  // ── Real Export ──────────────────────────────────────────
+  // ── Server-side export ───────────────────────────────────
+  // Renders on the server with ffmpeg: trims deleted segments, burns
+  // karaoke captions, crops to the chosen ratio, mixes music — and
+  // downloads a platform-ready H.264 MP4 (no more real-time tab capture).
   const handleExport = useCallback(async () => {
-    const vid = videoRef.current;
-    if (!vid || !hasVideo) {
-      alert('Please load a video first.');
+    if (!projectId || projectId === 'new') {
+      alert(
+        'This project has not been saved yet — re-upload it from the Upload page to enable exports.'
+      );
       return;
     }
-
     setExportStatus('recording');
     setExportProgress(0);
-    if (vid.paused === false) {
-      vid.pause();
-      setIsPlaying(false);
-    }
-
-    // Dimensions based on ratio
-    const [canvasW, canvasH] =
-      exportRatio === '9:16' ? [1080, 1920] : exportRatio === '1:1' ? [1080, 1080] : [1920, 1080];
-
-    const canvas = document.createElement('canvas');
-    canvas.width = canvasW;
-    canvas.height = canvasH;
-    const ctx = canvas.getContext('2d')!;
-
-    // Create export video element
-    const exportVid = document.createElement('video');
-    exportVid.src = vid.src;
-    exportVid.crossOrigin = 'anonymous';
-    exportVid.muted = false;
-    exportVid.volume = 1;
+    exportAbortRef.current = false;
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        exportVid.onloadedmetadata = () => resolve();
-        exportVid.onerror = () => reject(new Error('Video load failed'));
-        exportVid.load();
-        setTimeout(() => resolve(), 5000); // timeout fallback
+      const track = MUSIC_TRACKS.find((t) => t.id === selectedTrack);
+      const createRes = await fetch('/api/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          mode: 'timeline',
+          ratio: exportRatio,
+          captionTemplateId: captionStyleId,
+          music: track && musicPlaying ? { url: track.url, volume: musicVolume } : null,
+        }),
       });
-
-      exportVid.currentTime = 0;
-      await new Promise<void>((resolve) => {
-        exportVid.onseeked = () => resolve();
-        setTimeout(() => resolve(), 2000);
-      });
-
-      // Capture canvas stream
-      const stream = canvas.captureStream(30);
-
-      // Add audio from export video
-      try {
-        const audioCtx = new AudioContext();
-        const videoSrc = audioCtx.createMediaElementSource(exportVid);
-        const dest = audioCtx.createMediaStreamDestination();
-        videoSrc.connect(dest);
-        videoSrc.connect(audioCtx.destination);
-
-        // Add music if playing
-        if (musicRef.current && musicPlaying) {
-          const musicSrc = audioCtx.createMediaElementSource(musicRef.current);
-          const musicGain = audioCtx.createGain();
-          musicGain.gain.value = musicVolume * 0.5;
-          musicSrc.connect(musicGain);
-          musicGain.connect(dest);
-        }
-
-        dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
-      } catch {
-        // Audio capture optional — continue without
+      if (!createRes.ok) {
+        const data = await createRes.json().catch(() => ({}));
+        throw new Error(data.error || `Could not start the render (${createRes.status})`);
       }
+      const { job } = await createRes.json();
 
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : MediaRecorder.isTypeSupported('video/webm')
-          ? 'video/webm'
-          : 'video/mp4';
+      // Kick off processing; progress arrives via the polling loop below.
+      const processPromise = fetch(`/api/render/${job.id}/process`, { method: 'POST' });
 
-      const recorder = new MediaRecorder(stream, { mimeType });
-      recorderRef.current = recorder;
-      const chunks: Blob[] = [];
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (exportAbortRef.current) return;
+        const pollRes = await fetch(`/api/render/${job.id}`);
+        if (!pollRes.ok) continue;
+        const { job: j } = await pollRes.json();
+        setExportProgress(j.progress ?? 0);
+        if (j.status === 'completed') break;
+        if (j.status === 'failed') throw new Error(j.error || 'Render failed');
+      }
+      await processPromise.catch(() => {});
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
+      const a = document.createElement('a');
+      a.href = `/api/render/${job.id}/download`;
+      a.download = `${fileName || 'clip'}_export.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
 
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${fileName || 'clip'}_export.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 15000);
-        setExportStatus('done');
-        setTimeout(() => setExportStatus('idle'), 4000);
-        exportVid.pause();
-      };
-
-      const capStyle = CAPTION_STYLES.find((c) => c.id === captionStyleId) ?? CAPTION_STYLES[0];
-
-      const drawFrame = (startTs: number, totalMs: number) => {
-        const elapsed = performance.now() - startTs;
-        const pct = Math.min(elapsed / totalMs, 1);
-        setExportProgress(Math.round(pct * 100));
-
-        if (elapsed >= totalMs) {
-          recorder.stop();
-          return;
-        }
-
-        // Smart crop: center-weighted 9:16 from landscape source
-        const vw = exportVid.videoWidth || 1920;
-        const vh = exportVid.videoHeight || 1080;
-        const targetRatio = canvasW / canvasH;
-        const sourceRatio = vw / vh;
-        let sx = 0,
-          sy = 0,
-          sw = vw,
-          sh = vh;
-        if (sourceRatio > targetRatio) {
-          sw = vh * targetRatio;
-          sx = (vw - sw) / 2; // Center crop
-        } else {
-          sh = vw / targetRatio;
-          sy = (vh - sh) / 2;
-        }
-
-        ctx.drawImage(exportVid, sx, sy, sw, sh, 0, 0, canvasW, canvasH);
-
-        // Draw captions
-        const t = elapsed / 1000;
-        const seg = transcript.find((s) => t >= s.start && t < s.end && !s.deleted);
-        if (seg) {
-          const words = seg.text.split(' ');
-          const segProg = (t - seg.start) / Math.max(0.1, seg.end - seg.start);
-          const wi = Math.min(Math.floor(segProg * words.length), words.length - 1);
-          const word = words[wi] || '';
-
-          const fontSize = Math.round(canvasH * 0.05);
-          ctx.save();
-          ctx.font = `900 ${fontSize}px Arial, sans-serif`;
-          ctx.textAlign = 'center';
-          const x = canvasW / 2;
-          const y = canvasH * 0.8;
-
-          if (capStyle.id === 'mrBeast') {
-            const m = ctx.measureText(word);
-            ctx.fillStyle = '#facc15';
-            ctx.fillRect(x - m.width / 2 - 12, y - fontSize - 4, m.width + 24, fontSize + 16);
-            ctx.fillStyle = '#000';
-            ctx.fillText(word, x, y);
-          } else {
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = fontSize * 0.08;
-            ctx.strokeText(word, x, y);
-            ctx.fillStyle = capStyle.id === 'neon' ? '#c4b5fd' : '#fff';
-            ctx.fillText(word, x, y);
-          }
-          ctx.restore();
-        }
-
-        exportFrameRef.current = requestAnimationFrame(() => drawFrame(startTs, totalMs));
-      };
-
-      recorder.start(100);
-      exportVid.play();
-
-      const totalMs = totalDuration * 1000;
-      const startTs = performance.now();
-      exportFrameRef.current = requestAnimationFrame(() => drawFrame(startTs, totalMs));
+      setExportProgress(100);
+      setExportStatus('done');
+      setTimeout(() => setExportStatus('idle'), 4000);
     } catch (err) {
       console.error('Export error:', err);
       setExportStatus('error');
       setTimeout(() => setExportStatus('idle'), 3000);
     }
   }, [
-    hasVideo,
+    projectId,
     exportRatio,
-    totalDuration,
-    transcript,
     captionStyleId,
     fileName,
+    selectedTrack,
     musicPlaying,
     musicVolume,
   ]);
 
   const cancelExport = useCallback(() => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.stop();
-    }
-    if (exportFrameRef.current) cancelAnimationFrame(exportFrameRef.current);
+    exportAbortRef.current = true;
     setExportStatus('idle');
     setExportProgress(0);
   }, []);
@@ -954,7 +836,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             </div>
             <h3 className="text-lg font-bold mb-1">Exporting video…</h3>
             <p className="text-white/45 text-xs mb-5">
-              Recording in real-time with captions burned in
+              Rendering on our servers — cuts, karaoke captions & audio mix
             </p>
             <div className="mb-2 flex justify-between text-xs">
               <span className="text-white/40">Progress</span>
@@ -1041,7 +923,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           )}
           <button
             onClick={exportStatus === 'recording' ? cancelExport : handleExport}
-            disabled={!hasVideo}
+            disabled={projectId === 'new'}
             className={`flex items-center gap-1.5 text-xs font-bold px-4 py-1.5 rounded-lg transition-all disabled:opacity-40 ${exportStatus === 'done' ? 'bg-emerald-600/80 text-white' : exportStatus === 'recording' ? 'bg-rose-600/80 text-white' : 'bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white'}`}
           >
             {exportStatus === 'done' ? (
@@ -1532,13 +1414,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 </div>
                 <button
                   onClick={handleExport}
-                  disabled={!hasVideo || exportStatus === 'recording'}
+                  disabled={projectId === 'new' || exportStatus === 'recording'}
                   className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold transition-all flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-violet-500/25 disabled:opacity-50"
                 >
                   {exportStatus === 'recording' ? (
                     <>
                       <Loader size={14} className="cf-spin" />
-                      Recording…
+                      Rendering…
                     </>
                   ) : exportStatus === 'done' ? (
                     <>

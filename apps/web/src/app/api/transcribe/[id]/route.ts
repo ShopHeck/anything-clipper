@@ -332,6 +332,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       totalDuration: audioDurationMs / 1000,
       wordCount: words.length,
       text: data.text ?? '',
+      // Word-level timestamps (seconds) — persisted on the project to power
+      // karaoke captions and clip-boundary snapping.
+      words: words.map((w) => ({
+        text: w.text,
+        start: w.start / 1000,
+        end: w.end / 1000,
+      })),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

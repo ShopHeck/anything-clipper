@@ -837,9 +837,58 @@ export default function ClipsPage({ params }: { params: Promise<{ id: string }> 
     }
   }, [pageTitle]);
 
-  const handleExport = (id: string) => {
+  // Render the trimmed clip on the server (ffmpeg burns captions, crops to
+  // 9:16) and download the MP4. Also stamps clips.rendered_url so the clip
+  // becomes publishable.
+  const handleExport = async (id: string) => {
+    if (!projectId || projectId === 'new') {
+      alert('This project has not been saved yet — re-upload it to enable exports.');
+      return;
+    }
+    if (exportedClips.includes(id)) return;
     setExportedClips((prev) => [...prev, id]);
-    setTimeout(() => setExportedClips((prev) => prev.filter((x) => x !== id)), 3000);
+
+    try {
+      const createRes = await fetch('/api/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          mode: 'clip',
+          clipId: id,
+          ratio: '9:16',
+          captionTemplateId: 'hormozi',
+        }),
+      });
+      if (!createRes.ok) {
+        const data = await createRes.json().catch(() => ({}));
+        throw new Error(data.error || `Could not start the render (${createRes.status})`);
+      }
+      const { job } = await createRes.json();
+      const processPromise = fetch(`/api/render/${job.id}/process`, { method: 'POST' });
+
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const pollRes = await fetch(`/api/render/${job.id}`);
+        if (!pollRes.ok) continue;
+        const { job: j } = await pollRes.json();
+        if (j.status === 'completed') break;
+        if (j.status === 'failed') throw new Error(j.error || 'Render failed');
+      }
+      await processPromise.catch(() => {});
+
+      const a = document.createElement('a');
+      a.href = `/api/render/${job.id}/download`;
+      a.download = `clip-${id}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Clip export error:', err);
+      alert(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setTimeout(() => setExportedClips((prev) => prev.filter((x) => x !== id)), 3000);
+    }
   };
 
   const avgScore = allClips.length
