@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: Install ffmpeg (render pipeline smoke tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install dependencies (web workspace)
+        run: yarn workspaces focus web
+      - name: Typecheck
+        run: yarn workspace web typecheck
+      - name: Test
+        run: yarn workspace web test
