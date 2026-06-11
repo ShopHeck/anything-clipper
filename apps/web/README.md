@@ -49,6 +49,7 @@ APP_URL=https://your-app RENDER_WORKER_SECRET=... \
 | `FFMPEG_PATH` | ffmpeg binary path (default `ffmpeg`) |
 | `RENDER_WORKER_SECRET` | shared secret for the render worker + publish scheduler endpoints |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | TikTok publishing |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | billing (checkout + webhook → `user_plans`). Without these, billing routes return 501 and everyone stays on the free plan. |
 
 ## Architecture notes
 

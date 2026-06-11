@@ -89,9 +89,31 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [clientNow, setClientNow] = useState(0);
   const [usage, setUsage] = useState<{
-    plan: { label: string };
+    plan: { id: string; label: string };
     quotas: Array<{ key: string; used: number; limit: number; unlimited: boolean }>;
   } | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
+
+  const startUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: 'pro' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      alert(data.error || 'Upgrades are not available yet.');
+    } catch {
+      alert('Could not start checkout. Please try again.');
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   useEffect(() => {
     setClientNow(Date.now());
@@ -219,6 +241,15 @@ export default function DashboardPage() {
                 <div className="text-xs text-white/35">
                   {limit ? `${used} of ${limit} used` : `${used} used · unlimited`}
                 </div>
+                {usage?.plan.id === 'free' && (
+                  <button
+                    onClick={startUpgrade}
+                    disabled={upgrading}
+                    className="mt-2.5 w-full py-1.5 rounded-lg bg-white text-violet-700 text-[11px] font-bold hover:bg-white/90 transition-all disabled:opacity-50"
+                  >
+                    {upgrading ? 'Starting…' : 'Upgrade to Pro'}
+                  </button>
+                )}
               </div>
             );
           })()}
