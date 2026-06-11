@@ -122,6 +122,51 @@ describe.skipIf(!hasFfmpeg)('render pipeline (ffmpeg smoke)', () => {
     expect(Number(probe.format.duration)).toBeLessThan(14);
   }, 300_000);
 
+  it('renders with a brand logo overlay', () => {
+    const sourcePath = path.join(dir, 'brand-src.mp4');
+    const logoPath = path.join(dir, 'logo.png');
+    const outPath = path.join(dir, 'brand-out.mp4');
+    execFileSync(FFMPEG, [
+      '-y', '-hide_banner', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30:duration=4',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-shortest',
+      sourcePath,
+    ]);
+    // A small solid logo image.
+    execFileSync(FFMPEG, [
+      '-y', '-hide_banner', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'color=c=red:s=100x100:d=1',
+      '-frames:v', '1', logoPath,
+    ]);
+
+    const spec: RenderSpec = {
+      sourceUrl: sourcePath,
+      startSec: 0,
+      endSec: 4,
+      aspect: '9:16',
+      brand: { logoUrl: logoPath, logoPosition: 'br' },
+    };
+    const args = buildFfmpegArgs({
+      spec,
+      trimmedCuts: [],
+      outputDurationSec: 4,
+      assPath: null,
+      outPath,
+    });
+    const render = spawnSync(FFMPEG, args, { encoding: 'utf8', timeout: 120_000 });
+    expect(render.status, render.stderr?.slice(-800)).toBe(0);
+
+    const probe = JSON.parse(
+      execFileSync('ffprobe', [
+        '-v', 'error', '-show_entries', 'stream=width,height,codec_name', '-of', 'json', outPath,
+      ]).toString()
+    );
+    const video = probe.streams.find((s: { codec_name: string }) => s.codec_name === 'h264');
+    expect(video.width).toBe(1080);
+    expect(video.height).toBe(1920);
+  }, 120_000);
+
   it('halves output duration at 2x speed', () => {
     const sourcePath = path.join(dir, 'speed-src.mp4');
     const outPath = path.join(dir, 'speed-out.mp4');

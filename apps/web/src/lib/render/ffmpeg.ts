@@ -89,6 +89,14 @@ export function buildFfmpegArgs(input: BuildArgsInput): string[] {
     args.push('-stream_loop', '-1', '-i', spec.music.url);
   }
 
+  // Next input (optional): brand logo watermark. Index depends on whether the
+  // music input is present.
+  const logoUrl = spec.brand?.logoUrl || null;
+  const logoInputIdx = spec.music ? 2 : 1;
+  if (logoUrl) {
+    args.push('-i', logoUrl);
+  }
+
   const videoFilters: string[] = [];
   const audioFilters: string[] = [];
 
@@ -134,7 +142,21 @@ export function buildFfmpegArgs(input: BuildArgsInput): string[] {
   }
 
   const filterParts: string[] = [];
-  filterParts.push(`[0:v]${videoFilters.join(',')}[v]`);
+
+  if (logoUrl) {
+    // Watermark sits on top of everything (incl. captions). Scaled to ~14%
+    // of output width, inset from the chosen corner by ~4%.
+    const logoW = Math.round(width * 0.14);
+    const margin = Math.round(width * 0.04);
+    const pos = spec.brand?.logoPosition ?? 'br';
+    const x = pos === 'tl' || pos === 'bl' ? `${margin}` : `W-w-${margin}`;
+    const y = pos === 'tl' || pos === 'tr' ? `${margin}` : `H-h-${margin}`;
+    filterParts.push(`[0:v]${videoFilters.join(',')}[vbase]`);
+    filterParts.push(`[${logoInputIdx}:v]scale=${logoW}:-1[logo]`);
+    filterParts.push(`[vbase][logo]overlay=x=${x}:y=${y}[v]`);
+  } else {
+    filterParts.push(`[0:v]${videoFilters.join(',')}[v]`);
+  }
 
   if (spec.music) {
     const musicVol = Math.min(Math.max(spec.music.volume, 0), 1);

@@ -22,6 +22,8 @@ export interface RenderRequestOptions {
   autoReframe?: boolean;
   // Global playback speed multiplier (clamped to 0.5–3).
   speed?: number;
+  // Apply a saved brand kit (logo watermark + caption color) at render time.
+  brandKitId?: string | null;
 }
 
 interface ProjectRow {
@@ -112,6 +114,22 @@ export async function buildRenderSpec(
     return { error: 'The selected range is too short to render.', status: 422 };
   }
 
+  // Load the chosen brand kit (caller-scoped) for logo + caption color.
+  let brand: RenderSpec['brand'] = null;
+  if (opts.brandKitId) {
+    const [kit] = await sql`
+      SELECT logo_url, logo_position, caption_color FROM brand_kits
+      WHERE id = ${opts.brandKitId} AND user_id = ${userId}
+    `;
+    if (kit) {
+      brand = {
+        logoUrl: (kit.logo_url as string) || null,
+        logoPosition: (kit.logo_position as 'tl' | 'tr' | 'bl' | 'br') || 'br',
+        captionColor: (kit.caption_color as string) || null,
+      };
+    }
+  }
+
   // Deleted transcript segments become cuts (only relevant inside the window).
   const cuts: CutRange[] = segments
     .filter((s) => s.is_deleted)
@@ -150,6 +168,7 @@ export async function buildRenderSpec(
     zoomKeyframes: opts.zoomKeyframes,
     autoReframe: opts.autoReframe ?? false,
     speed: opts.speed && opts.speed > 0 ? Math.min(3, Math.max(0.5, opts.speed)) : 1,
+    brand,
     music: opts.music ?? null,
     loudnessNormalize: true,
   };

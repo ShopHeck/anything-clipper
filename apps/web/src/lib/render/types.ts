@@ -52,6 +52,12 @@ export interface RenderSpec {
   speedRanges?: SpeedRange[];
   // Global playback speed multiplier (1 = normal, 1.5 = 50% faster).
   speed?: number;
+  // Brand kit applied at render time: logo watermark + caption color.
+  brand?: {
+    logoUrl?: string | null;
+    logoPosition?: 'tl' | 'tr' | 'bl' | 'br';
+    captionColor?: string | null;
+  } | null;
   music?: { url: string; volume: number } | null;
   loudnessNormalize?: boolean;
   // When true and cropKeyframes aren't explicitly provided, the render worker

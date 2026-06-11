@@ -224,6 +224,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [subtitleBusy, setSubtitleBusy] = useState(false);
   const [autoReframe, setAutoReframe] = useState(true);
   const [exportSpeed, setExportSpeed] = useState(1);
+  const [brandKits, setBrandKits] = useState<Array<{ id: string; name: string }>>([]);
+  const [brandKitId, setBrandKitId] = useState('');
   const [selectedPlatforms, setSelectedPlatforms] = useState(['tiktok', 'reels', 'shorts']);
   const [exportRatio, setExportRatio] = useState<Ratio>('9:16');
   const [colorGrade, setColorGrade] = useState('cinema');
@@ -252,6 +254,20 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const wordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const effectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportAbortRef = useRef(false);
+
+  // Load the user's brand kits for the export panel selector.
+  useEffect(() => {
+    fetch('/api/brand-kits')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.brandKits) {
+          setBrandKits(d.brandKits);
+          const def = d.brandKits.find((k: { is_default?: boolean }) => k.is_default);
+          if (def) setBrandKitId(def.id);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Load from store + DB ─────────────────────────────────
   useEffect(() => {
@@ -494,6 +510,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           captionLanguage: captionLanguage || null,
           autoReframe: exportRatio !== '16:9' ? autoReframe : false,
           speed: exportSpeed,
+          brandKitId: brandKitId || null,
           music: track && musicPlaying ? { url: track.url, volume: musicVolume } : null,
         }),
       });
@@ -540,6 +557,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     captionLanguage,
     autoReframe,
     exportSpeed,
+    brandKitId,
     fileName,
     selectedTrack,
     musicPlaying,
@@ -1517,6 +1535,23 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       ))}
                     </div>
                   </div>
+                  {brandKits.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[10px] text-white/42 mb-1.5">Brand kit</p>
+                      <select
+                        value={brandKitId}
+                        onChange={(e) => setBrandKitId(e.target.value)}
+                        className="w-full bg-white/6 border border-white/10 text-white/75 text-[11px] px-2.5 py-2 rounded-lg focus:border-violet-500/50 outline-none"
+                      >
+                        <option value="">None</option>
+                        {brandKits.map((k) => (
+                          <option key={k.id} value={k.id}>
+                            {k.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {[
                     ['Captions', 'Burned in ✓'],
                     ['Format', 'MP4 · H.264'],

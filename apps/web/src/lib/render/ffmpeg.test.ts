@@ -114,6 +114,40 @@ describe('buildFfmpegArgs', () => {
     expect(graph).not.toContain('PTS/');
   });
 
+  it('overlays a brand logo at the chosen corner', () => {
+    const args = buildFfmpegArgs({
+      spec: { ...baseSpec, brand: { logoUrl: 'https://example.com/logo.png', logoPosition: 'tl' } },
+      trimmedCuts: [],
+      outputDurationSec: 60,
+      assPath: null,
+      outPath: '/tmp/out.mp4',
+    });
+    expect(args.join(' ')).toContain('-i https://example.com/logo.png');
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('[vbase]');
+    expect(graph).toContain('[1:v]scale=');
+    // Top-left → x and y both at the positive margin.
+    expect(graph).toMatch(/overlay=x=\d+:y=\d+\[v\]/);
+  });
+
+  it('uses logo input index 2 when music is also present', () => {
+    const args = buildFfmpegArgs({
+      spec: {
+        ...baseSpec,
+        music: { url: 'https://example.com/track.mp3', volume: 0.3 },
+        brand: { logoUrl: 'https://example.com/logo.png', logoPosition: 'br' },
+      },
+      trimmedCuts: [],
+      outputDurationSec: 60,
+      assPath: null,
+      outPath: '/tmp/out.mp4',
+    });
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('[2:v]scale=');
+    // Bottom-right → expressions reference W-w / H-h.
+    expect(graph).toContain('overlay=x=W-w-');
+  });
+
   it('mixes a music bed at the requested volume', () => {
     const args = buildFfmpegArgs({
       spec: { ...baseSpec, music: { url: 'https://example.com/track.mp3', volume: 0.3 } },

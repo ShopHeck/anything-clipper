@@ -110,8 +110,13 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
       ).map((w) => ({ text: w.text, start: w.start / speed, end: w.end / speed }));
       if (outputWords.length > 0) {
         const [width, height] = ASPECT_DIMENSIONS[spec.aspect];
+        // Brand kit can override the caption highlight color.
+        const baseTemplate = getCaptionTemplate(spec.captions.templateId);
+        const template = spec.brand?.captionColor
+          ? { ...baseTemplate, highlightColor: spec.brand.captionColor }
+          : baseTemplate;
         const ass = buildAss(groupWordsIntoLines(outputWords), {
-          template: getCaptionTemplate(spec.captions.templateId),
+          template,
           playResX: width,
           playResY: height,
           position: spec.captions.position,
