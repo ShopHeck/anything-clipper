@@ -9,6 +9,7 @@ import sql from '@/app/api/utils/sql';
 import { presignDownload, presignUpload, storageConfigured } from '@/app/api/utils/storage';
 import { buildAss, groupWordsIntoLines } from '@/lib/captions/ass';
 import { getCaptionTemplate } from '@/lib/captions/templates';
+import { analyzeReframe } from '@/lib/clip/reframe-analyze';
 import { buildFfmpegArgs } from './ffmpeg';
 import { mapWordsToOutput, normalizeCuts, outputDuration, sourceToOutputTime } from './time';
 import { ASPECT_DIMENSIONS, RenderSpec } from './types';
@@ -126,10 +127,27 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
         })
         .filter((k): k is K => k !== null);
 
+    // Active-speaker auto-reframe: only when opted in and the caller didn't
+    // pass explicit crop keyframes — keeps default center-crop unchanged.
+    let cropKeyframes = spec.cropKeyframes;
+    if (spec.autoReframe && (!cropKeyframes || cropKeyframes.length === 0)) {
+      try {
+        await sql`UPDATE render_jobs SET progress = 2 WHERE id = ${jobId}`.catch(() => {});
+        cropKeyframes = await analyzeReframe({
+          ffmpegPath: FFMPEG,
+          sourceUrl: spec.sourceUrl,
+          startSec: spec.startSec,
+          endSec: spec.endSec,
+        });
+      } catch (err) {
+        console.error('Auto-reframe analysis failed; using center crop:', err);
+      }
+    }
+
     const args = buildFfmpegArgs({
       spec: {
         ...spec,
-        cropKeyframes: shiftKeyframes(spec.cropKeyframes),
+        cropKeyframes: shiftKeyframes(cropKeyframes),
         zoomKeyframes: shiftKeyframes(spec.zoomKeyframes),
       },
       trimmedCuts: cuts.map((c) => ({

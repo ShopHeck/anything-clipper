@@ -18,6 +18,8 @@ export interface RenderRequestOptions {
   music?: { url: string; volume: number } | null;
   zoomKeyframes?: Array<{ t: number; scale: number }>;
   cropKeyframes?: Array<{ t: number; x: number }>;
+  // Opt-in active-speaker auto-reframe (computed in the render worker).
+  autoReframe?: boolean;
 }
 
 interface ProjectRow {
@@ -144,6 +146,7 @@ export async function buildRenderSpec(
           },
     cropKeyframes: opts.cropKeyframes,
     zoomKeyframes: opts.zoomKeyframes,
+    autoReframe: opts.autoReframe ?? false,
     music: opts.music ?? null,
     loudnessNormalize: true,
   };

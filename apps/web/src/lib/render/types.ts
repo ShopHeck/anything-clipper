@@ -52,6 +52,9 @@ export interface RenderSpec {
   speedRanges?: SpeedRange[];
   music?: { url: string; volume: number } | null;
   loudnessNormalize?: boolean;
+  // When true and cropKeyframes aren't explicitly provided, the render worker
+  // analyzes subject motion and generates reframe keyframes automatically.
+  autoReframe?: boolean;
 }
 
 export const ASPECT_DIMENSIONS: Record<AspectRatio, [number, number]> = {

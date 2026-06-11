@@ -222,6 +222,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [captionStyleId, setCaptionStyleId] = useState('mrBeast');
   const [captionLanguage, setCaptionLanguage] = useState('');
   const [subtitleBusy, setSubtitleBusy] = useState(false);
+  const [autoReframe, setAutoReframe] = useState(true);
   const [selectedPlatforms, setSelectedPlatforms] = useState(['tiktok', 'reels', 'shorts']);
   const [exportRatio, setExportRatio] = useState<Ratio>('9:16');
   const [colorGrade, setColorGrade] = useState('cinema');
@@ -490,6 +491,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ratio: exportRatio,
           captionTemplateId: captionStyleId,
           captionLanguage: captionLanguage || null,
+          autoReframe: exportRatio !== '16:9' ? autoReframe : false,
           music: track && musicPlaying ? { url: track.url, volume: musicVolume } : null,
         }),
       });
@@ -534,6 +536,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     exportRatio,
     captionStyleId,
     captionLanguage,
+    autoReframe,
     fileName,
     selectedTrack,
     musicPlaying,
@@ -1476,11 +1479,32 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       </button>
                     ))}
                   </div>
+                  <button
+                    onClick={() => setAutoReframe((v) => !v)}
+                    disabled={exportRatio === '16:9'}
+                    className="w-full flex items-center justify-between mb-3 disabled:opacity-40"
+                  >
+                    <div className="text-left">
+                      <div className="text-[11px] font-semibold text-white/70">
+                        Auto-reframe to speaker
+                      </div>
+                      <div className="text-[9px] text-white/35">
+                        Tracks the subject so they stay in frame
+                      </div>
+                    </div>
+                    <div
+                      className={`w-9 h-5 rounded-full p-0.5 transition-all shrink-0 ${autoReframe && exportRatio !== '16:9' ? 'bg-violet-500' : 'bg-white/12'}`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-all ${autoReframe && exportRatio !== '16:9' ? 'translate-x-4' : ''}`}
+                      />
+                    </div>
+                  </button>
                   {[
                     ['Captions', 'Burned in ✓'],
-                    ['Format', 'WebM / MP4'],
+                    ['Format', 'MP4 · H.264'],
                     ['FPS', '30 fps'],
-                    ['Smart Crop', '9:16 center'],
+                    ['Crop', autoReframe && exportRatio !== '16:9' ? 'Auto-reframe' : 'Center'],
                   ].map(([l, v]) => (
                     <div key={l} className="flex items-center justify-between mb-2.5">
                       <span className="text-[10px] text-white/42">{l}</span>
