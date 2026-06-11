@@ -20,6 +20,8 @@ export interface RenderRequestOptions {
   cropKeyframes?: Array<{ t: number; x: number }>;
   // Opt-in active-speaker auto-reframe (computed in the render worker).
   autoReframe?: boolean;
+  // Global playback speed multiplier (clamped to 0.5–3).
+  speed?: number;
 }
 
 interface ProjectRow {
@@ -147,6 +149,7 @@ export async function buildRenderSpec(
     cropKeyframes: opts.cropKeyframes,
     zoomKeyframes: opts.zoomKeyframes,
     autoReframe: opts.autoReframe ?? false,
+    speed: opts.speed && opts.speed > 0 ? Math.min(3, Math.max(0.5, opts.speed)) : 1,
     music: opts.music ?? null,
     loudnessNormalize: true,
   };

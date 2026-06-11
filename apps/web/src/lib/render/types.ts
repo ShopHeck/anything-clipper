@@ -50,6 +50,8 @@ export interface RenderSpec {
   cropKeyframes?: CropKeyframe[];
   zoomKeyframes?: ZoomKeyframe[];
   speedRanges?: SpeedRange[];
+  // Global playback speed multiplier (1 = normal, 1.5 = 50% faster).
+  speed?: number;
   music?: { url: string; volume: number } | null;
   loudnessNormalize?: boolean;
   // When true and cropKeyframes aren't explicitly provided, the render worker

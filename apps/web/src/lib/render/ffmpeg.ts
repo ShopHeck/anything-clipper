@@ -46,6 +46,23 @@ function escapeFilterPath(p: string): string {
   return p.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
 }
 
+// atempo only accepts 0.5–2.0 per instance, so chain factors to reach any
+// target speed (e.g. 2.5 → atempo=2.0,atempo=1.25).
+export function buildAtempoChain(speed: number): string[] {
+  const filters: string[] = [];
+  let remaining = speed;
+  while (remaining > 2.0) {
+    filters.push('atempo=2.0');
+    remaining /= 2.0;
+  }
+  while (remaining < 0.5) {
+    filters.push('atempo=0.5');
+    remaining /= 0.5;
+  }
+  filters.push(`atempo=${remaining.toFixed(4)}`);
+  return filters;
+}
+
 export interface BuildArgsInput {
   spec: RenderSpec;
   // Cut ranges normalized and shifted to trimmed-input time (start at 0).
@@ -79,6 +96,15 @@ export function buildFfmpegArgs(input: BuildArgsInput): string[] {
     const keep = buildKeepExpr(trimmedCuts);
     videoFilters.push(`select='${keep}'`, 'setpts=N/FRAME_RATE/TB');
     audioFilters.push(`aselect='${keep}'`, 'asetpts=N/SR/TB');
+  }
+
+  // Global playback speed (pacing). Applied here so all downstream filters
+  // — crop/zoom keyframes and burned captions — operate in the final
+  // post-speed time domain (the worker divides their timestamps by `speed`).
+  const speed = spec.speed && spec.speed > 0 ? spec.speed : 1;
+  if (speed !== 1) {
+    videoFilters.push(`setpts=PTS/${speed}`);
+    audioFilters.push(...buildAtempoChain(speed));
   }
 
   // Aspect crop sized off the source (iw/ih), with optional animated

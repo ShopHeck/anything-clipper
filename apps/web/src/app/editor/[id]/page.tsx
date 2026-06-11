@@ -223,6 +223,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [captionLanguage, setCaptionLanguage] = useState('');
   const [subtitleBusy, setSubtitleBusy] = useState(false);
   const [autoReframe, setAutoReframe] = useState(true);
+  const [exportSpeed, setExportSpeed] = useState(1);
   const [selectedPlatforms, setSelectedPlatforms] = useState(['tiktok', 'reels', 'shorts']);
   const [exportRatio, setExportRatio] = useState<Ratio>('9:16');
   const [colorGrade, setColorGrade] = useState('cinema');
@@ -492,6 +493,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           captionTemplateId: captionStyleId,
           captionLanguage: captionLanguage || null,
           autoReframe: exportRatio !== '16:9' ? autoReframe : false,
+          speed: exportSpeed,
           music: track && musicPlaying ? { url: track.url, volume: musicVolume } : null,
         }),
       });
@@ -537,6 +539,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     captionStyleId,
     captionLanguage,
     autoReframe,
+    exportSpeed,
     fileName,
     selectedTrack,
     musicPlaying,
@@ -1500,6 +1503,20 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       />
                     </div>
                   </button>
+                  <div className="mb-3">
+                    <p className="text-[10px] text-white/42 mb-1.5">Playback speed</p>
+                    <div className="flex gap-2">
+                      {[0.75, 1, 1.25, 1.5].map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setExportSpeed(s)}
+                          className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${exportSpeed === s ? 'bg-violet-600/25 border-violet-500/40 text-violet-300' : 'bg-white/4 border-white/8 text-white/35 hover:text-white/58'}`}
+                        >
+                          {s}×
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   {[
                     ['Captions', 'Burned in ✓'],
                     ['Format', 'MP4 · H.264'],

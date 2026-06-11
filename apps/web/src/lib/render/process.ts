@@ -90,12 +90,16 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
 
   try {
     const cuts = normalizeCuts(spec.cuts ?? [], spec.startSec, spec.endSec);
-    const durationSec = outputDuration(spec.startSec, spec.endSec, cuts);
+    // Global speed compresses the post-cut output time domain; caption words
+    // and crop/zoom keyframes are divided by it so they stay in sync with the
+    // sped-up video (ffmpeg applies the matching setpts/atempo).
+    const speed = spec.speed && spec.speed > 0 ? spec.speed : 1;
+    const durationSec = outputDuration(spec.startSec, spec.endSec, cuts) / speed;
     if (durationSec < 0.5) {
       throw new Error('Nothing left to render — the clip range minus cuts is empty.');
     }
 
-    // Captions → ASS file (word times mapped into output time first).
+    // Captions → ASS file (word times mapped into output time, then sped up).
     let assPath: string | null = null;
     if (spec.captions && spec.captions.words.length > 0) {
       const outputWords = mapWordsToOutput(
@@ -103,7 +107,7 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
         spec.startSec,
         spec.endSec,
         cuts
-      );
+      ).map((w) => ({ text: w.text, start: w.start / speed, end: w.end / speed }));
       if (outputWords.length > 0) {
         const [width, height] = ASPECT_DIMENSIONS[spec.aspect];
         const ass = buildAss(groupWordsIntoLines(outputWords), {
@@ -123,7 +127,7 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
       (kfs ?? [])
         .map((k) => {
           const t = sourceToOutputTime(k.t, spec.startSec, cuts);
-          return t === null ? null : { ...k, t };
+          return t === null ? null : { ...k, t: t / speed };
         })
         .filter((k): k is K => k !== null);
 

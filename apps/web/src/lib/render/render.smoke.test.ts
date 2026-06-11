@@ -121,4 +121,43 @@ describe.skipIf(!hasFfmpeg)('render pipeline (ffmpeg smoke)', () => {
     expect(Number(probe.format.duration)).toBeGreaterThan(12);
     expect(Number(probe.format.duration)).toBeLessThan(14);
   }, 300_000);
+
+  it('halves output duration at 2x speed', () => {
+    const sourcePath = path.join(dir, 'speed-src.mp4');
+    const outPath = path.join(dir, 'speed-out.mp4');
+    execFileSync(FFMPEG, [
+      '-y', '-hide_banner', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30:duration=10',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=10',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-shortest',
+      sourcePath,
+    ]);
+
+    const spec: RenderSpec = {
+      sourceUrl: sourcePath,
+      startSec: 0,
+      endSec: 10,
+      aspect: '9:16',
+      speed: 2,
+    };
+
+    const args = buildFfmpegArgs({
+      spec,
+      trimmedCuts: [],
+      outputDurationSec: 5,
+      assPath: null,
+      outPath,
+    });
+    const render = spawnSync(FFMPEG, args, { encoding: 'utf8', timeout: 120_000 });
+    expect(render.status, render.stderr?.slice(-800)).toBe(0);
+
+    const probe = JSON.parse(
+      execFileSync('ffprobe', [
+        '-v', 'error', '-show_entries', 'format=duration', '-of', 'json', outPath,
+      ]).toString()
+    );
+    // 10s at 2x ≈ 5s.
+    expect(Number(probe.format.duration)).toBeGreaterThan(4.3);
+    expect(Number(probe.format.duration)).toBeLessThan(5.7);
+  }, 180_000);
 });

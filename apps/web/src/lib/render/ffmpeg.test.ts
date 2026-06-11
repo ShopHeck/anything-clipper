@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFfmpegArgs, piecewiseLinearExpr } from './ffmpeg';
+import { buildAtempoChain, buildFfmpegArgs, piecewiseLinearExpr } from './ffmpeg';
 import { RenderSpec } from './types';
 
 const baseSpec: RenderSpec = {
@@ -28,6 +28,20 @@ describe('piecewiseLinearExpr', () => {
     );
     expect(expr).toContain('(0+(1-0)*(t-0)/10)');
     expect(expr).toContain('lt(t\\,10)');
+  });
+});
+
+describe('buildAtempoChain', () => {
+  it('uses a single atempo within the valid range', () => {
+    expect(buildAtempoChain(1.5)).toEqual(['atempo=1.5000']);
+  });
+
+  it('chains atempo for speeds above 2x', () => {
+    expect(buildAtempoChain(2.5)).toEqual(['atempo=2.0', 'atempo=1.2500']);
+  });
+
+  it('chains atempo for speeds below 0.5x', () => {
+    expect(buildAtempoChain(0.25)).toEqual(['atempo=0.5', 'atempo=0.5000']);
   });
 });
 
@@ -72,6 +86,32 @@ describe('buildFfmpegArgs', () => {
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
     expect(graph).toContain("ass='/tmp/captions.ass'");
+  });
+
+  it('applies global speed via setpts and atempo', () => {
+    const args = buildFfmpegArgs({
+      spec: { ...baseSpec, speed: 1.5 },
+      trimmedCuts: [],
+      outputDurationSec: 40,
+      assPath: null,
+      outPath: '/tmp/out.mp4',
+    });
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('setpts=PTS/1.5');
+    expect(graph).toContain('atempo=1.5000');
+  });
+
+  it('omits speed filters at 1x', () => {
+    const args = buildFfmpegArgs({
+      spec: { ...baseSpec, speed: 1 },
+      trimmedCuts: [],
+      outputDurationSec: 60,
+      assPath: null,
+      outPath: '/tmp/out.mp4',
+    });
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).not.toContain('atempo');
+    expect(graph).not.toContain('PTS/');
   });
 
   it('mixes a music bed at the requested volume', () => {
