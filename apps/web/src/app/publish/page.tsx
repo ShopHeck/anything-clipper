@@ -165,6 +165,15 @@ function PublishPageInner() {
       };
       showToast(`❌ ${errMap[tiktokError] ?? tiktokError}`, 'error');
     }
+
+    // Handle redirect back from YouTube OAuth
+    if (searchParams.get('youtube_connected') === '1') {
+      setActiveTab('accounts');
+      showToast('✅ YouTube connected successfully!', 'success');
+    } else if (searchParams.get('youtube_error')) {
+      setActiveTab('accounts');
+      showToast(`❌ YouTube: ${searchParams.get('youtube_error')}`, 'error');
+    }
   }, [searchParams, showToast]);
 
   useEffect(() => {
@@ -200,17 +209,27 @@ function PublishPageInner() {
     setJobs((j) => j.filter((x) => x.id !== id));
   };
 
-  const publishToTiktok = async (job: PublishJob) => {
-    const tiktokConn = connections.find((c) => c.platform === 'TikTok');
-    if (!tiktokConn) {
-      showToast('❌ Connect TikTok first in the Accounts tab', 'error');
+  // Publish a queued job to its platform. Routes to the platform's endpoint
+  // (TikTok / YouTube) and requires that platform to be connected.
+  const publishJob = async (job: PublishJob) => {
+    const endpoints: Record<string, string> = {
+      TikTok: '/api/publish/tiktok',
+      YouTube: '/api/publish/youtube',
+    };
+    const endpoint = endpoints[job.platform];
+    if (!endpoint) {
+      showToast(`❌ Publishing to ${job.platform} isn't available yet`, 'error');
+      return;
+    }
+    if (!connections.find((c) => c.platform === job.platform)) {
+      showToast(`❌ Connect ${job.platform} first in the Accounts tab`, 'error');
       setActiveTab('accounts');
       return;
     }
     setPublishingJobId(job.id);
     setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, status: 'processing' } : j)));
     try {
-      const res = await fetch('/api/publish/tiktok', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId: job.id }),
@@ -222,7 +241,7 @@ function PublishPageInner() {
             j.id === job.id ? { ...j, status: 'published', platform_url: data.platform_url } : j
           )
         );
-        showToast('🎉 Posted to TikTok successfully!', 'success');
+        showToast(`🎉 Posted to ${job.platform} successfully!`, 'success');
       } else {
         const errMsg = data.error ?? 'Publishing failed';
         setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, status: 'failed' } : j)));
@@ -506,16 +525,17 @@ function PublishPageInner() {
                       )}
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      {job.status === 'queued' && job.platform === 'TikTok' && (
-                        <button
-                          onClick={() => publishToTiktok(job)}
-                          disabled={publishingJobId !== null}
-                          className="flex items-center gap-1.5 text-xs bg-[#ff005022] border border-[#ff005040] text-[#ff6680] hover:bg-[#ff005035] px-3 py-1.5 rounded-lg transition-all font-semibold disabled:opacity-50"
-                        >
-                          <Send size={11} />
-                          Post to TikTok
-                        </button>
-                      )}
+                      {job.status === 'queued' &&
+                        (job.platform === 'TikTok' || job.platform === 'YouTube') && (
+                          <button
+                            onClick={() => publishJob(job)}
+                            disabled={publishingJobId !== null}
+                            className="flex items-center gap-1.5 text-xs bg-[#ff005022] border border-[#ff005040] text-[#ff6680] hover:bg-[#ff005035] px-3 py-1.5 rounded-lg transition-all font-semibold disabled:opacity-50"
+                          >
+                            <Send size={11} />
+                            Post to {job.platform}
+                          </button>
+                        )}
                       {job.status === 'processing' && (
                         <div className="flex items-center gap-1.5 text-xs text-blue-400 px-3 py-1.5">
                           <RefreshCw size={11} className="animate-spin" />
@@ -618,6 +638,44 @@ function PublishPageInner() {
                   >
                     <span className="text-base">🎵</span>
                     Connect with TikTok
+                  </a>
+                );
+              })()}
+            </div>
+
+            {/* YouTube — OAuth publish */}
+            <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-5 mb-8">
+              {(() => {
+                const ytConn = connections.find((c) => c.platform === 'YouTube');
+                if (ytConn) {
+                  return (
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 bg-[#ff000018]">
+                        ▶️
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-white">YouTube</div>
+                        <div className="flex items-center gap-1 text-[10px] text-emerald-400 mt-0.5">
+                          <CheckCircle size={9} />
+                          {ytConn.username || 'Connected'}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => disconnectAccount('YouTube')}
+                        className="text-xs text-rose-400/70 hover:text-rose-400 hover:bg-rose-500/12 px-3 py-1.5 rounded-lg transition-all border border-rose-500/20 hover:border-rose-500/30"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <a
+                    href="/api/auth/youtube"
+                    className="w-full flex items-center justify-center gap-2.5 py-3 bg-[#ff0000] hover:bg-[#cc0000] text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-[#ff000035]"
+                  >
+                    <span className="text-base">▶️</span>
+                    Connect YouTube (Shorts)
                   </a>
                 );
               })()}

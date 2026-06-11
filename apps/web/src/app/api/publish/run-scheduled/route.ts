@@ -1,5 +1,5 @@
 import sql from '@/app/api/utils/sql';
-import { publishTikTokJob } from '@/lib/publish/tiktok';
+import { dispatchPublish } from '@/lib/publish/dispatch';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -31,12 +31,11 @@ export async function POST(request: Request) {
 
   const results: Array<{ jobId: string; ok: boolean; error?: string }> = [];
   for (const job of due) {
-    if (job.platform !== 'TikTok') {
-      await sql`UPDATE publish_jobs SET status = 'failed', error_msg = ${'Scheduled publishing for ' + job.platform + ' is not available yet'} WHERE id = ${job.id}`;
-      results.push({ jobId: job.id, ok: false, error: 'unsupported platform' });
-      continue;
+    const result = await dispatchPublish(job.platform, job.id, job.user_id);
+    if (!result.ok && result.status === 400) {
+      // Unsupported platform — record the reason so it doesn't get re-claimed.
+      await sql`UPDATE publish_jobs SET status = 'failed', error_msg = ${result.error ?? 'Unsupported platform'} WHERE id = ${job.id}`;
     }
-    const result = await publishTikTokJob(job.id, job.user_id);
     results.push({ jobId: job.id, ok: result.ok, error: result.error });
   }
 

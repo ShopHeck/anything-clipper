@@ -201,9 +201,31 @@ The single highest-leverage change. (Fixes **C2/C3**.)
   `lib/publish/tiktok.ts` (shared by the interactive route + scheduler); other platforms
   return a clear "not available yet" instead of mis-posting. Analytics columns
   (views/likes/comments/shares) added to `publish_jobs`.
-- ⏳ **Deferred (next iteration):** Instagram Reels / YouTube Shorts / X OAuth + adapters,
-  Stripe checkout/webhooks to flip `user_plans` (the schema + plan gates are ready), posted-clip
-  analytics polling, brand kits, and teams/collaboration.
+- ✅ **Stripe checkout + webhooks** (`lib/billing/stripe.ts`) flip `user_plans`; quota gates
+  already enforce it. Graceful no-op without keys.
+- ✅ **Posted-clip analytics** from TikTok (`lib/analytics/tiktok.ts`, `/api/analytics[/refresh]`).
+- ✅ **YouTube Shorts publishing** — OAuth + resumable upload adapter behind a platform
+  dispatcher (`lib/publish/dispatch.ts`, `youtube.ts`); TikTok + YouTube both route through it,
+  and the scheduler is platform-agnostic.
+- ⏳ **Deferred (next iteration):** Instagram Reels / X adapters, brand-kit *logo upload* UI
+  (kits + render already work via `/api/brand-kits`), TTS dubbing, teams/collaboration.
+
+## Post-roadmap upgrades (shipped)
+
+Built on top of the five phases, in recommended order:
+
+1. ✅ **Active-speaker auto-reframe** — dependency-free motion-saliency analyzer in the render
+   worker generates crop keyframes; opt-in, center-crop fallback (`lib/clip/reframe-analyze.ts`).
+2. ✅ **Global playback speed** — setpts + chained atempo with caption/keyframe/duration
+   remapping (`lib/render/ffmpeg.ts`).
+3. ✅ **Stripe billing** — checkout + signature-verified webhooks → `user_plans`.
+4. ✅ **Posted-clip analytics** — TikTok Display-API stats with best-effort job matching.
+5. ✅ **Brand kits** — logo watermark + caption color burned in at render (`/api/brand-kits`).
+6. ✅ **Multi-platform publishing** — platform dispatcher + YouTube Shorts OAuth/upload adapter.
+
+Test coverage grew from 47 → 81 unit tests (plus ffmpeg smoke tests for reframe, speed, and
+logo overlay). Everything needing external services (Stripe, YouTube/Google, object storage)
+degrades gracefully when unconfigured, so defaults never change.
 
 ---
 
