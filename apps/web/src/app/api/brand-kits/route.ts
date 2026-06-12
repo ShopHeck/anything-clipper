@@ -49,6 +49,27 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  const user = await getApiUser(request);
+  if (!user) return unauthorized();
+
+  try {
+    const { id, isDefault } = (await request.json()) as { id?: string; isDefault?: boolean };
+    if (!id) return Response.json({ error: 'id required' }, { status: 400 });
+
+    if (isDefault) {
+      await sql`UPDATE brand_kits SET is_default = FALSE WHERE user_id = ${user.id}`;
+      await sql`UPDATE brand_kits SET is_default = TRUE WHERE id = ${id} AND user_id = ${user.id}`;
+    } else {
+      await sql`UPDATE brand_kits SET is_default = FALSE WHERE id = ${id} AND user_id = ${user.id}`;
+    }
+    return Response.json({ success: true });
+  } catch (err) {
+    console.error('Update brand kit error:', err);
+    return Response.json({ error: 'Failed to update brand kit' }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request) {
   const user = await getApiUser(request);
   if (!user) return unauthorized();

@@ -212,7 +212,7 @@ export default function DashboardPage() {
           {[
             { icon: Grid, label: 'Projects', active: true, href: '/dashboard' },
             { icon: Scissors, label: 'My Clips', active: false, href: '/publish?tab=library' },
-            { icon: Sparkles, label: 'AI Studio', active: false, href: '#' },
+            { icon: Sparkles, label: 'Brand Kits', active: false, href: '/brand' },
             { icon: BarChart2, label: 'Analytics', active: false, href: '#' },
             { icon: Share2, label: 'Publishing', active: false, href: '/publish' },
             { icon: Users, label: 'Team', active: false, href: '#' },
