@@ -6,12 +6,17 @@ export async function GET(request: Request) {
   if (!user) return unauthorized();
 
   try {
+    // Owned projects plus any shared with the caller (by user id or email).
     const projects = await sql`
-      SELECT id, title, file_name, file_url, total_duration, viral_score,
-             clip_count, status, created_at
-      FROM projects
-      WHERE user_id = ${user.id}
-      ORDER BY created_at DESC
+      SELECT p.id, p.title, p.file_name, p.file_url, p.total_duration, p.viral_score,
+             p.clip_count, p.status, p.created_at,
+             CASE WHEN p.user_id = ${user.id} THEN 'owner' ELSE s.role END AS role
+      FROM projects p
+      LEFT JOIN project_shares s
+        ON s.project_id = p.id
+        AND (s.shared_with_user_id = ${user.id} OR lower(s.shared_with_email) = lower(${user.email}))
+      WHERE p.user_id = ${user.id} OR s.id IS NOT NULL
+      ORDER BY p.created_at DESC
     `;
     return Response.json({ projects });
   } catch (error) {

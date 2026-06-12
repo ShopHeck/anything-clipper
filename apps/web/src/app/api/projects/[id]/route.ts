@@ -1,14 +1,6 @@
+import { canEdit, resolveProjectRole } from '@/app/api/utils/access';
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
-
-// Every handler verifies the project belongs to the signed-in user before
-// touching it (or any of its child rows).
-async function ownsProject(userId: string, projectId: string): Promise<boolean> {
-  const [row] = await sql`
-    SELECT id FROM projects WHERE id = ${projectId} AND user_id = ${userId}
-  `;
-  return Boolean(row);
-}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getApiUser(request);
@@ -17,15 +9,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
 
+    // Owners and shared collaborators (viewer/editor) can read the project.
+    const role = await resolveProjectRole(user.id, user.email, id);
+    if (!role) {
+      return Response.json({ error: 'Project not found' }, { status: 404 });
+    }
+
     const [project] = await sql`
       SELECT id, title, file_name, file_url, storage_key, total_duration, viral_score,
              word_count, clip_count, status, created_at, updated_at
-      FROM projects WHERE id = ${id} AND user_id = ${user.id}
+      FROM projects WHERE id = ${id}
     `;
 
     if (!project) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
+    project.role = role;
 
     const segments = await sql`
       SELECT id, start_time, end_time, segment_text, is_highlight, is_deleted, viral_score, sort_order
@@ -55,7 +54,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     const { id } = await params;
-    if (!(await ownsProject(user.id, id))) {
+    // Owners and editors may save edits; viewers cannot.
+    const role = await resolveProjectRole(user.id, user.email, id);
+    if (!canEdit(role)) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
 
