@@ -3,8 +3,9 @@
 import { PublishResult } from './tiktok';
 import { publishTikTokJob } from './tiktok';
 import { publishYouTubeJob } from './youtube';
+import { publishInstagramJob } from './instagram';
 
-export const SUPPORTED_PLATFORMS = ['TikTok', 'YouTube'] as const;
+export const SUPPORTED_PLATFORMS = ['TikTok', 'YouTube', 'Instagram'] as const;
 export type Platform = (typeof SUPPORTED_PLATFORMS)[number];
 
 export function isSupportedPlatform(p: string): p is Platform {
@@ -21,6 +22,8 @@ export async function dispatchPublish(
       return publishTikTokJob(jobId, userId);
     case 'YouTube':
       return publishYouTubeJob(jobId, userId);
+    case 'Instagram':
+      return publishInstagramJob(jobId, userId);
     default:
       return {
         ok: false,

@@ -45,6 +45,7 @@ describe('isSupportedPlatform', () => {
   it('recognizes implemented platforms only', () => {
     expect(isSupportedPlatform('TikTok')).toBe(true);
     expect(isSupportedPlatform('YouTube')).toBe(true);
-    expect(isSupportedPlatform('Instagram')).toBe(false);
+    expect(isSupportedPlatform('Instagram')).toBe(true);
+    expect(isSupportedPlatform('Twitter')).toBe(false);
   });
 });
