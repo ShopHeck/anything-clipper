@@ -1,7 +1,14 @@
 {
   "task_id": "task-openai-direct-ugc-ui",
   "task_description": "Refactor AI/scraping/image-gen services to work directly with OpenAI API (no proprietary proxy needed), then build the frontend UGC page for the full TikTok Shop URL to UGC Video flow.",
-  "status": "in_progress",
+  "status": "completed",
   "feature_order": ["FEAT-001", "FEAT-002"],
-  "blocked_reason": null
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "Typecheck passes cleanly. 148 tests pass (1 skipped - pre-existing ffmpeg smoke test). Review issues addressed: fire-and-forget fixed with await + staleness detection, SSRF defense-in-depth added, image model made configurable."
+  }
 }

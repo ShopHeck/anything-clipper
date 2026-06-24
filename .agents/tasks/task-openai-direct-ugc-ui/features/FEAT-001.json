@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Refactor AI services to support direct OpenAI API calls when ANYTHING proxy is not configured. This covers: (1) the AI chat completion gateway, (2) image generation, and (3) the web scraping function in the orchestrator. The TTS module already has direct OpenAI fallback and needs no changes.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Modify apps/web/src/app/api/utils/ai.ts - Add OpenAI direct fallback. When NEXT_PUBLIC_CREATE_BASE_URL and ANYTHING_PROJECT_TOKEN are not set but OPENAI_API_KEY is available, call https://api.openai.com/v1/chat/completions directly with model from env var OPENAI_MODEL (default 'gpt-4o'). Send messages array and response_format: { type: 'json_schema', json_schema: { name: schema.name, strict: true, schema: schema.schema } } when jsonSchema is provided. Parse response from data.choices[0].message.content. Keep the existing proxy path as priority #1 (same pattern as TTS).",
     "Modify apps/web/src/lib/assets/image-gen.ts - Add OpenAI direct fallback. When proxy is not configured but OPENAI_API_KEY is set, call https://api.openai.com/v1/images/generations with model 'dall-e-3', prompt, size, and n:1. Parse response from data.data[0].url. Keep returning null on failure (graceful degradation).",
@@ -25,5 +25,5 @@
     "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 145 tests pass (up from 127 - added 18 new tests). Typecheck passes cleanly. The direct OpenAI fallback pattern follows the same structure as TTS (generate.ts). The yarn.lock had pre-existing modifications but was not staged."
 }
