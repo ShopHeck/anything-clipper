@@ -46,12 +46,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Step 2: Use GPT to extract structured product info
+    // Step 2: Use GPT to extract structured product info (including image URLs)
     const product = await chatCompletionJson(
       [
         {
           role: 'system',
-          content: `You are an e-commerce data extractor. Extract product details from webpage text. Only report details actually present in the page content — never invent prices, ratings, or sales numbers.`,
+          content: `You are an e-commerce data extractor. Extract product details from webpage text. Only report details actually present in the page content — never invent prices, ratings, or sales numbers. Also extract any image URLs you find (og:image meta tags, img src attributes, or any image URLs in the page content).`,
         },
         {
           role: 'user',
@@ -62,7 +62,9 @@ URL: ${url}
 Page content (may be partial):
 ${pageText}
 
-For features, return 4-6 bullet point benefits found on the page that would resonate in a UGC video. Make them benefit-focused, not just feature descriptions.`,
+For features, return 4-6 bullet point benefits found on the page that would resonate in a UGC video. Make them benefit-focused, not just feature descriptions.
+
+For imageUrls, extract any product image URLs found in the page content (from img tags, og:image meta tags, or any image URL patterns). Return only valid absolute URLs.`,
         },
       ],
       {
@@ -89,8 +91,23 @@ For features, return 4-6 bullet point benefits found on the page that would reso
               items: { type: 'string' },
               description: 'List of 4-6 benefit-focused selling points for UGC videos',
             },
+            imageUrls: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Product image URLs found on the page (og:image, img src, CDN URLs)',
+            },
           },
-          required: ['name', 'price', 'rating', 'soldCount', 'shopName', 'category', 'features'],
+          required: [
+            'name',
+            'price',
+            'rating',
+            'soldCount',
+            'shopName',
+            'category',
+            'features',
+            'imageUrls',
+          ],
           additionalProperties: false,
         },
       }
