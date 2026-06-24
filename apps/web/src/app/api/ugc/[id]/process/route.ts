@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const isWorker =
     Boolean(workerSecret) && request.headers.get('x-render-worker-secret') === workerSecret;
 
-  let userId: string;
+  let project: Record<string, unknown>;
 
   if (!isWorker) {
     const user = await getApiUser(request);
@@ -29,23 +29,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     `;
     if (!owned) return Response.json({ error: 'UGC project not found' }, { status: 404 });
 
-    userId = user.id;
+    project = owned;
   } else {
     // Worker mode: look up project without user auth
-    const [project] = await sql`
+    const [found] = await sql`
       SELECT id, user_id, product_url, status FROM ugc_projects WHERE id = ${id}
     `;
-    if (!project) return Response.json({ error: 'UGC project not found' }, { status: 404 });
-    userId = project.user_id;
+    if (!found) return Response.json({ error: 'UGC project not found' }, { status: 404 });
+    project = found;
   }
 
-  // Fetch project details for orchestration
-  const [project] = await sql`
-    SELECT id, user_id, product_url, status FROM ugc_projects WHERE id = ${id}
-  `;
-
-  if (!project) {
-    return Response.json({ error: 'UGC project not found' }, { status: 404 });
+  // Re-entrance guard: reject if the project is already completed or composing
+  if (project.status === 'completed' || project.status === 'composing') {
+    return Response.json(
+      { error: `Project is already ${project.status}` },
+      { status: 409 }
+    );
   }
 
   // Parse optional params from request body
@@ -64,8 +63,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const result = await orchestrateUGCVideo({
     projectId: id,
-    userId,
-    url: project.product_url,
+    userId: project.user_id as string,
+    url: project.product_url as string,
     voice,
     templateStyle,
     captionTemplate,

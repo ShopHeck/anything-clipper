@@ -99,7 +99,8 @@ async function updateProjectStatus(
 }
 
 async function markFailed(projectId: string, error: string): Promise<void> {
-  await sql`UPDATE ugc_projects SET status = 'failed', updated_at = NOW() WHERE id = ${projectId}`;
+  const errorPayload = JSON.stringify({ error });
+  await sql`UPDATE ugc_projects SET status = 'failed', video_assets = ${errorPayload}, updated_at = NOW() WHERE id = ${projectId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,13 +349,24 @@ export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<Orc
 
     // Step 3: Generate TTS
     const ttsResult = await generateTTSAudio(script, userId, projectId, voice);
+    // Store the storage key (not a presigned URL) so the link doesn't expire in the DB
+    const ttsStorageKey = `tts/${userId}/${projectId}.mp3`;
     await updateProjectStatus(projectId, 'generating_assets', {
-      tts_audio_url: ttsResult.audioUrl,
+      tts_audio_url: ttsStorageKey,
       tts_timing: ttsResult,
     });
 
     // Step 4: Gather visual assets
     const assets = await gatherAssets(product, userId);
+
+    // Abort early if no visual assets are available (empty imageUrl would crash FFmpeg)
+    if (assets.productImages.length === 0 && assets.lifestyleImages.length === 0) {
+      const noAssetsError =
+        'No visual assets available for this product. The product page may not contain images, and image generation was unavailable.';
+      await markFailed(projectId, noAssetsError);
+      return { status: 'failed', error: noAssetsError };
+    }
+
     await updateProjectStatus(projectId, 'planning_scenes', {
       video_assets: assets,
     });

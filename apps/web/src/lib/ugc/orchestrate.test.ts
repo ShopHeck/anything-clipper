@@ -433,5 +433,32 @@ describe('orchestrate', () => {
       expect(result.status).toBe('failed');
       expect(result.error).toContain('ffmpeg exited with code 1');
     });
+
+    it('aborts early when no visual assets are available', async () => {
+      mockSql.mockImplementation(async () => [{ id: 'proj-1' }]);
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => 'Page content',
+        arrayBuffer: async () => new ArrayBuffer(0),
+      });
+
+      // Product with no image URLs so processProductImages is not called
+      const productNoImages = { ...mockProduct, imageUrls: [] };
+      vi.mocked(chatCompletionJson)
+        .mockResolvedValueOnce(productNoImages)
+        .mockResolvedValueOnce(mockScript);
+
+      vi.mocked(scriptToAudio).mockResolvedValueOnce(mockTTSResult);
+      // No lifestyle image generated either
+      vi.mocked(generateImage).mockResolvedValueOnce(null);
+
+      const result = await orchestrateUGCVideo(orchestrateOpts);
+
+      expect(result.status).toBe('failed');
+      expect(result.error).toContain('No visual assets available');
+      // Should not reach composition step
+      expect(composeUGCVideo).not.toHaveBeenCalled();
+    });
   });
 });
