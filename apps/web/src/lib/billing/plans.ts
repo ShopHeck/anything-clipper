@@ -10,6 +10,7 @@ export interface PlanQuotas {
   clipGenerationsPerMonth: number;
   rendersPerMonth: number;
   translationsPerMonth: number;
+  ugcVideosPerMonth: number;
 }
 
 export interface Plan {
@@ -29,6 +30,7 @@ export const PLANS: Record<PlanId, Plan> = {
       clipGenerationsPerMonth: 10,
       rendersPerMonth: 15,
       translationsPerMonth: 5,
+      ugcVideosPerMonth: 3,
     },
   },
   pro: {
@@ -40,6 +42,7 @@ export const PLANS: Record<PlanId, Plan> = {
       clipGenerationsPerMonth: 300,
       rendersPerMonth: 500,
       translationsPerMonth: 200,
+      ugcVideosPerMonth: 50,
     },
   },
   business: {
@@ -51,6 +54,7 @@ export const PLANS: Record<PlanId, Plan> = {
       clipGenerationsPerMonth: -1,
       rendersPerMonth: -1,
       translationsPerMonth: -1,
+      ugcVideosPerMonth: -1,
     },
   },
 };
@@ -67,6 +71,7 @@ export const EVENT_TO_QUOTA: Record<string, keyof PlanQuotas> = {
   'ai.generate-clips': 'clipGenerationsPerMonth',
   'render.create': 'rendersPerMonth',
   'captions.translate': 'translationsPerMonth',
+  'ai.ugc-create': 'ugcVideosPerMonth',
 };
 
 export interface QuotaCheck {
