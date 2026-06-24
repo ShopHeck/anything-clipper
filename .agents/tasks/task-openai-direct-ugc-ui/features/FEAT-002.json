@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Build the frontend UGC page with URL input, voice/template selection, progress display, script preview, and video output. Creates a new /ugc route following existing UI patterns (dark theme, violet/pink gradients, shadcn/ui components, TanStack Query, auth via useSession).",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create apps/web/src/app/ugc/page.tsx - Full UGC page with: (a) URL input field for TikTok Shop product URL, (b) Voice selection dropdown (nova, alloy, echo, fable, onyx, shimmer), (c) Template style select (pov, storytime, bold-hook, authentic), (d) 'Generate UGC Video' button that posts to /api/ugc/create then /api/ugc/:id/process, (e) Progress display showing pipeline stages (scraping, generating_script, generating_tts, generating_assets, planning_scenes, composing, completed), (f) Script preview showing hook/problem/solution/demo/socialProof/cta when available, (g) Final video download/preview link when complete, (h) Error states with retry option. Use TanStack Query useQuery for polling /api/ugc/:id status. Use sonner toast for notifications. Protect with useSession (redirect to /account/signin if not authenticated). Follow the existing dark theme pattern from upload/page.tsx and dashboard/page.tsx.",
     "Add a navigation link to the UGC page from the dashboard. In apps/web/src/app/dashboard/page.tsx, add a link/button to /ugc (e.g., 'Create UGC Video' button in the header area alongside the existing upload button)."
@@ -23,5 +23,5 @@
     "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Typecheck and all 145 tests pass. Used !! coercion for Record<string, unknown> values in JSX conditionals to satisfy strict TypeScript. The page follows the same visual patterns as upload/page.tsx and dashboard/page.tsx (dark theme, violet/pink gradients, stage progress display). TanStack Query useQuery with refetchInterval handles polling."
 }
