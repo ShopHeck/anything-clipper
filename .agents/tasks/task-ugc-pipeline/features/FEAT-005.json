@@ -2,7 +2,7 @@
   "id": "FEAT-005",
   "type": "fix",
   "description": "Fix critical issues found in code review: empty imageUrl crashes FFmpeg, no re-entrance guard on process route, markFailed discards error detail, presigned URL expiry in DB, and SSRF protection on URL input.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Fix empty imageUrl crash: In orchestrate.ts, after gatherAssets returns, check if BOTH productImages and lifestyleImages are empty. If so, abort with clear error.",
     "Fix re-entrance guard: In process/route.ts, check project.status before proceeding. Return 409 if completed or composing. Eliminate duplicate SQL query.",
@@ -24,5 +24,5 @@
     "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "All 127 tests pass, typecheck clean. Used product with empty imageUrls array to test the empty-assets guard since processProductImages mock returned undefined after clearAllMocks when imageUrls had entries (vitest quirk with mockResolvedValueOnce after clearAllMocks on unused mocked modules)."
 }
