@@ -1,0 +1,30 @@
+{
+  "project_type": "Next.js 16 monorepo (Yarn 4 workspaces) - AI video editor",
+  "language": "TypeScript / React 19",
+  "build_system": "Yarn 4 workspaces. Web app at apps/web/",
+  "test_framework": "vitest with vi.mock, vi.fn patterns. Tests co-located as *.test.ts alongside source.",
+  "build_command": "yarn workspace web typecheck",
+  "test_command": "yarn workspace web test",
+  "verification_instructions": "1. Run yarn workspace web typecheck (must pass with no errors). 2. Run yarn workspace web test (all tests must pass).",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "cd /projects/sandbox/anything-clipper && corepack enable && yarn install (already done)",
+  "environment_constraints": "OPEN_INTERNET network. No Docker daemon available. Node 22 pre-installed. ffmpeg available.",
+  "contribution_requirements": "CI runs typecheck then test. No linter enforcement currently.",
+  "key_patterns": "1. AI gateway at apps/web/src/app/api/utils/ai.ts uses chatCompletion/chatCompletionJson with JsonSchemaSpec. 2. TTS at src/lib/tts/generate.ts already has OpenAI direct fallback pattern (priority: proxy first, then OPENAI_API_KEY). 3. Image gen at src/lib/assets/image-gen.ts returns null when not configured (graceful). 4. Frontend uses shadcn/ui components, dark theme (bg-[#07070f]), violet/pink gradients, Lucide icons, TanStack Query, auth via better-auth useSession. 5. API routes at src/app/api/ use getApiUser for auth.",
+  "relevant_files": [
+    "apps/web/src/app/api/utils/ai.ts",
+    "apps/web/src/lib/assets/image-gen.ts",
+    "apps/web/src/lib/ugc/orchestrate.ts",
+    "apps/web/src/lib/tts/generate.ts",
+    "apps/web/src/app/api/ugc/create/route.ts",
+    "apps/web/src/app/api/ugc/[id]/route.ts",
+    "apps/web/src/app/api/ugc/[id]/process/route.ts",
+    "apps/web/src/app/upload/page.tsx",
+    "apps/web/src/app/dashboard/page.tsx",
+    "apps/web/src/lib/auth-client.ts",
+    "apps/web/src/app/providers.tsx",
+    "apps/web/src/lib/ugc/orchestrate.test.ts",
+    "apps/web/src/lib/tts/generate.test.ts"
+  ],
+  "directory_structure": "apps/web/src/app/ - Next.js app router pages. apps/web/src/app/api/ - API routes. apps/web/src/lib/ - shared libraries (tts, assets, ugc, etc). apps/web/src/components/ui/ - shadcn/ui components. apps/web/src/utils/ - client utilities."
+}

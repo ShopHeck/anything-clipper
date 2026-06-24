@@ -1,0 +1,7 @@
+{
+  "task_id": "task-openai-direct-ugc-ui",
+  "task_description": "Refactor AI/scraping/image-gen services to work directly with OpenAI API (no proprietary proxy needed), then build the frontend UGC page for the full TikTok Shop URL to UGC Video flow.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

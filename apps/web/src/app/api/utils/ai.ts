@@ -18,27 +18,65 @@ export class AiUnavailableError extends Error {
   }
 }
 
+/**
+ * Send a chat completion request.
+ *
+ * Routing priority:
+ * 1. NEXT_PUBLIC_CREATE_BASE_URL proxy with ANYTHING_PROJECT_TOKEN
+ * 2. Direct OpenAI API with OPENAI_API_KEY
+ */
 export async function chatCompletion(
   messages: ChatMessage[],
   jsonSchema?: JsonSchemaSpec
 ): Promise<string> {
-  const base = process.env.NEXT_PUBLIC_CREATE_BASE_URL;
-  const token = process.env.ANYTHING_PROJECT_TOKEN;
-  if (!base || !token) {
+  const proxyBase = process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+  const proxyToken = process.env.ANYTHING_PROJECT_TOKEN;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  let url: string;
+  let headers: Record<string, string>;
+  let body: string;
+
+  if (proxyBase && proxyToken) {
+    // Route through the project proxy
+    url = `${proxyBase}/integrations/chat-gpt/conversationgpt4`;
+    headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${proxyToken}`,
+    };
+    body = JSON.stringify({
+      messages,
+      ...(jsonSchema ? { json_schema: jsonSchema } : {}),
+    });
+  } else if (openaiKey) {
+    // Direct OpenAI API fallback
+    url = 'https://api.openai.com/v1/chat/completions';
+    headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${openaiKey}`,
+    };
+    const model = process.env.OPENAI_MODEL || 'gpt-4o';
+    body = JSON.stringify({
+      model,
+      messages,
+      ...(jsonSchema
+        ? {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: jsonSchema.name,
+                strict: true,
+                schema: jsonSchema.schema,
+              },
+            },
+          }
+        : {}),
+    });
+  } else {
     throw new AiUnavailableError('AI integration is not configured on this deployment');
   }
 
-  const res = await fetch(`${base}/integrations/chat-gpt/conversationgpt4`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      messages,
-      ...(jsonSchema ? { json_schema: jsonSchema } : {}),
-    }),
-  });
+  const res = await fetch(url, { method: 'POST', headers, body });
 
   if (!res.ok) {
     throw new AiUnavailableError(`upstream returned ${res.status}`);

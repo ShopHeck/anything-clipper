@@ -134,12 +134,41 @@ describe('orchestrate', () => {
       );
     });
 
-    it('throws if scraping service is not configured', async () => {
+    it('throws if scraping service is not configured and no API key', async () => {
       delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
       delete process.env.ANYTHING_PROJECT_TOKEN;
+      delete process.env.OPENAI_API_KEY;
 
       await expect(scrapeProduct('https://example.com')).rejects.toThrow(
-        'Scraping service is not configured'
+        'Scraping service is not configured and no AI API key is available'
+      );
+    });
+
+    it('uses direct fetch fallback when proxy not configured but OPENAI_API_KEY is set', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => '<html><body><h1>Test Product</h1><p>Great item</p></body></html>',
+        });
+
+      global.fetch = mockFetch;
+
+      vi.mocked(chatCompletionJson).mockResolvedValueOnce(mockProduct);
+
+      const result = await scrapeProduct('https://tiktok.com/product/456');
+      expect(result).toEqual(mockProduct);
+      // Should call fetch with the product URL directly (not a proxy endpoint)
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://tiktok.com/product/456',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'User-Agent': expect.stringContaining('Mozilla'),
+          }),
+        })
       );
     });
   });

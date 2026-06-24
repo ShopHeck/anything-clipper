@@ -110,23 +110,43 @@ async function markFailed(projectId: string, error: string): Promise<void> {
 export async function scrapeProduct(url: string): Promise<ProductData> {
   const base = process.env.NEXT_PUBLIC_CREATE_BASE_URL;
   const token = process.env.ANYTHING_PROJECT_TOKEN;
-  if (!base || !token) {
-    throw new Error('Scraping service is not configured');
-  }
-
-  const scrapeRes = await fetch(`${base}/integrations/web-scraping/post`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ url, getText: true }),
-  });
+  const openaiKey = process.env.OPENAI_API_KEY;
 
   let pageText = '';
-  if (scrapeRes.ok) {
-    pageText = await scrapeRes.text();
-    pageText = pageText.slice(0, 4000);
+
+  if (base && token) {
+    // Use proxy scraping service
+    const scrapeRes = await fetch(`${base}/integrations/web-scraping/post`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ url, getText: true }),
+    });
+
+    if (scrapeRes.ok) {
+      pageText = await scrapeRes.text();
+      pageText = pageText.slice(0, 4000);
+    }
+  } else if (openaiKey) {
+    // Direct fetch fallback when proxy is not configured
+    const scrapeRes = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (scrapeRes.ok) {
+      const html = await scrapeRes.text();
+      // Strip HTML tags to extract text content
+      pageText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      pageText = pageText.slice(0, 4000);
+    }
+  } else {
+    throw new Error('Scraping service is not configured and no AI API key is available');
   }
 
   if (!pageText) {
