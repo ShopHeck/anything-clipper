@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "TTS voiceover generation service - integrate a text-to-speech API that converts UGC script sections into natural-sounding voiceover audio. This is the critical missing piece between script generation and video rendering.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create apps/web/src/lib/tts/generate.ts - a TTS service module that calls OpenAI's TTS API (via the existing NEXT_PUBLIC_CREATE_BASE_URL proxy or direct OpenAI endpoint). Accept text content and voice settings (voice, speed), return an audio buffer (MP3). Include types for voice options (alloy, echo, fable, onyx, nova, shimmer).",
     "Create apps/web/src/lib/tts/types.ts - shared types: TTSVoice, TTSRequest, TTSResult with audioUrl and durationSec fields.",
@@ -24,5 +24,5 @@
     "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Buffer type from generateTTS needs to be wrapped in new Uint8Array() when passed as fetch body due to Node.js/TypeScript type constraints. All 20 TTS tests pass. Typecheck clean."
 }
