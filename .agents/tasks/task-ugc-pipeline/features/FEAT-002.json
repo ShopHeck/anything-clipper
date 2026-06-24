@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Product image extraction and AI image generation - extract product images from scraped TikTok Shop pages and generate 'product in use' lifestyle images via AI image generation. This provides the visual assets the video compositor needs.",
+  "status": "completed",
+  "steps": [
+    "Enhance apps/web/src/app/api/product-details/route.ts - modify the GPT extraction prompt to also extract imageUrls (array of product image URLs found on the page) from the scraped page text. Add imageUrls to the JSON schema response. The scraper returns HTML text which may contain image URLs in img tags or og:image meta.",
+    "Create apps/web/src/lib/assets/image-gen.ts - AI image generation service. Use the existing chatCompletion proxy (NEXT_PUBLIC_CREATE_BASE_URL) to call a DALL-E/image generation endpoint. Accept a product description + scene context (e.g. 'person using product in bathroom mirror'), return a generated image URL. Fallback: if image generation is not available, return null so the pipeline can proceed with extracted product images only.",
+    "Create apps/web/src/lib/assets/product-images.ts - module to download product images from URLs, validate them (check Content-Type is image, file size reasonable), re-upload to object storage (so they are durable and accessible to ffmpeg), and return storage URLs. Handle common TikTok image CDN patterns.",
+    "Create apps/web/src/lib/assets/types.ts - types: ProductAssets { productImages: string[], lifestyleImages: string[], backgroundMusic?: string }, AssetGenerationRequest, AssetGenerationResult.",
+    "Create apps/web/src/lib/assets/scene-planner.ts - takes a UGC script + product data + TTS timing markers, plans which visual asset shows during which script section. Returns a scene plan: array of { startSec, endSec, type: 'product-image' | 'lifestyle' | 'text-overlay', assetUrl?, overlayText? }. The hook section gets a product close-up, problem/solution gets lifestyle shots, demo gets product images, CTA gets the product + price overlay.",
+    "Create apps/web/src/lib/assets/scene-planner.test.ts - unit tests for scene planning logic: verify timing alignment with TTS markers, verify all script sections are covered, verify correct asset types per section.",
+    "Create apps/web/src/app/api/generate-assets/route.ts - POST endpoint that takes { productData, script, ttsTiming } and orchestrates image extraction + generation + scene planning. Returns { assets: ProductAssets, scenePlan: ScenePlan[] }. Apply auth, rate limiting."
+  ],
+  "acceptance_criteria": [
+    "Product details extraction returns imageUrls array from scraped content",
+    "scene-planner.ts produces a complete scene plan covering the full TTS duration with no gaps",
+    "Scene plan correctly maps script sections to appropriate visual asset types",
+    "Unit tests for scene planner pass",
+    "All new files pass typecheck",
+    "POST /api/generate-assets route compiles and follows auth/rate-limit patterns"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web typecheck",
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": "All 15 scene planner tests pass. Typecheck clean. The scene planner fills gaps between TTS sections by extending the previous scene's endSec, ensuring zero gaps in the timeline. Text-overlay scenes also get a background product image. Round-robin asset selection cycles through available images."
+}
