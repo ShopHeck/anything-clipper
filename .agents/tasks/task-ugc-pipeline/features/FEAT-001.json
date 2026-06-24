@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "TTS voiceover generation service - integrate a text-to-speech API that converts UGC script sections into natural-sounding voiceover audio. This is the critical missing piece between script generation and video rendering.",
+  "status": "completed",
+  "steps": [
+    "Create apps/web/src/lib/tts/generate.ts - a TTS service module that calls OpenAI's TTS API (via the existing NEXT_PUBLIC_CREATE_BASE_URL proxy or direct OpenAI endpoint). Accept text content and voice settings (voice, speed), return an audio buffer (MP3). Include types for voice options (alloy, echo, fable, onyx, nova, shimmer).",
+    "Create apps/web/src/lib/tts/types.ts - shared types: TTSVoice, TTSRequest, TTSResult with audioUrl and durationSec fields.",
+    "Create apps/web/src/lib/tts/script-to-audio.ts - takes a full UGC script object (hook, problem, solution, demo, socialProof, cta), concatenates sections with natural pause timing between them, generates a single voiceover audio file via the TTS service, and returns the audio URL (uploaded to object storage) plus per-section timing markers (start/end seconds for each script section). These timing markers drive the video composition later.",
+    "Create apps/web/src/app/api/tts/route.ts - POST endpoint that accepts { text, voice?, speed? }, calls the TTS service, uploads the result to object storage (key: tts/<userId>/<jobId>.mp3), and returns { audioUrl, durationSec }. Apply auth, rate limiting (consumeRateLimit with 'ai.tts' event, 20/hour), and quota check.",
+    "Create apps/web/src/lib/tts/generate.test.ts - unit tests for the TTS module: test script section concatenation logic, pause insertion timing calculations, and error handling. Mock the fetch call to the TTS API.",
+    "Add migration apps/web/migrations/0006_ugc_pipeline.sql - add ugc_projects table (id, user_id, product_url, product_data JSONB, script JSONB, tts_audio_url, tts_timing JSONB, video_assets JSONB, render_job_id, status TEXT, created_at, updated_at) to track the full UGC pipeline state."
+  ],
+  "acceptance_criteria": [
+    "apps/web/src/lib/tts/generate.ts exports a generateTTS function that accepts text and returns audio buffer",
+    "apps/web/src/lib/tts/script-to-audio.ts exports scriptToAudio that processes a full UGC script into timed voiceover audio",
+    "POST /api/tts route compiles with no type errors, uses auth + rate limiting + storage upload pattern",
+    "Unit tests for timing logic pass (yarn workspace web test)",
+    "Migration 0006 creates ugc_projects table with all required columns",
+    "yarn workspace web typecheck passes with no errors"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web typecheck",
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": "Buffer type from generateTTS needs to be wrapped in new Uint8Array() when passed as fetch body due to Node.js/TypeScript type constraints. All 20 TTS tests pass. Typecheck clean."
+}

@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-005",
+  "type": "fix",
+  "description": "Fix critical issues found in code review: empty imageUrl crashes FFmpeg, no re-entrance guard on process route, markFailed discards error detail, presigned URL expiry in DB, and SSRF protection on URL input.",
+  "status": "completed",
+  "steps": [
+    "Fix empty imageUrl crash: In orchestrate.ts, after gatherAssets returns, check if BOTH productImages and lifestyleImages are empty. If so, abort with clear error.",
+    "Fix re-entrance guard: In process/route.ts, check project.status before proceeding. Return 409 if completed or composing. Eliminate duplicate SQL query.",
+    "Fix markFailed: Store error message in video_assets JSONB column. Update GET route to extract and return error when status is failed.",
+    "Fix presigned URL expiry: Store TTS storage key (not presigned URL) in DB. Presign on read in GET route.",
+    "Fix SSRF: In create/route.ts, reject non-http(s) protocols and private IP ranges."
+  ],
+  "acceptance_criteria": [
+    "Pipeline aborts early with clear error if no visual assets available",
+    "Process route returns 409 for already completed/composing projects",
+    "markFailed stores error detail in video_assets JSONB",
+    "TTS audio key stored in DB, presigned on read",
+    "SSRF protection rejects private IPs and non-http(s) URLs",
+    "All files pass typecheck",
+    "All existing tests still pass"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web typecheck",
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": "All 127 tests pass, typecheck clean. Used product with empty imageUrls array to test the empty-assets guard since processProductImages mock returned undefined after clearAllMocks when imageUrls had entries (vitest quirk with mockResolvedValueOnce after clearAllMocks on unused mocked modules)."
+}
