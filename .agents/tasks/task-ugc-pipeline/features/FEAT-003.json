@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "UGC video composition engine - extend the existing FFmpeg render pipeline to compose a new video from scratch using: TTS voiceover audio + product/lifestyle images + text overlays + captions + background music. This is the core composition that creates the actual UGC video.",
+  "status": "completed",
+  "steps": [
+    "Create apps/web/src/lib/ugc/types.ts - UGC composition types: UGCRenderSpec extending/parallel to RenderSpec. Fields: ttsAudioUrl (voiceover MP3), scenes (array of { startSec, endSec, imageUrl, zoomDirection?: 'in'|'out'|'pan-left'|'pan-right', overlayText?: string, overlayPosition?: 'top'|'center'|'bottom' }), backgroundMusicUrl?, backgroundMusicVolume?, captions (same SpecWord[] format for burned captions from TTS text + timing), aspect, captionTemplateId.",
+    "Create apps/web/src/lib/ugc/ffmpeg-compose.ts - build FFmpeg args for UGC video composition. The approach: (1) TTS audio is the primary timeline driver (its duration = video duration), (2) each scene is a still image displayed for its duration with Ken Burns effect (slow zoom/pan to make stills cinematic), (3) scenes are concatenated using ffmpeg's concat demuxer or complex filter chains, (4) captions are burned via ASS (reusing existing ass.ts), (5) text overlays for hook/CTA/price are drawn via drawtext filter, (6) background music is mixed at low volume under voiceover. Use the zoompan filter for Ken Burns on stills.",
+    "Create apps/web/src/lib/ugc/compose.ts - high-level composition function: takes UGCRenderSpec, downloads all assets to a temp dir, generates the ASS file for captions (using existing buildAss + groupWordsIntoLines), writes an ffmpeg input list, calls buildUGCFfmpegArgs, runs ffmpeg via the same spawn pattern as process.ts, uploads output to storage, returns the rendered MP4 URL.",
+    "Create apps/web/src/lib/ugc/ffmpeg-compose.test.ts - unit tests for the FFmpeg arg builder: verify it produces valid ffmpeg args for various scene configurations (single image, multiple images, with/without music, with/without captions). Test Ken Burns zoompan filter expressions are correctly generated.",
+    "Create apps/web/src/lib/ugc/captions-from-script.ts - convert UGC script text + TTS timing into SpecWord[] for caption burning. Split the TTS text into words and distribute timing based on character count proportionally across each word within its section timing window. This feeds directly into the existing buildAss pipeline."
+  ],
+  "acceptance_criteria": [
+    "buildUGCFfmpegArgs produces a valid ffmpeg command array that includes: input images with loop/duration, zoompan filter for Ken Burns, TTS audio as primary audio, optional music mix, ASS caption burn, H.264 output",
+    "compose.ts follows the same pattern as process.ts (temp dir, spawn ffmpeg, upload to storage, cleanup)",
+    "captions-from-script.ts correctly distributes word timing across script sections",
+    "Unit tests pass for ffmpeg arg building and caption timing",
+    "All new files pass typecheck"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web typecheck",
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": "All 28 tests pass (19 for ffmpeg-compose, 9 for captions-from-script). Typecheck clean. The composition uses concat filter with per-scene zoompan rather than concat demuxer since complex filtergraph gives more control over Ken Burns effects and drawtext overlays. -shortest flag ensures output caps at TTS audio length. Background music mixed at default 0.15 volume using same amix pattern as existing ffmpeg.ts."
+}
