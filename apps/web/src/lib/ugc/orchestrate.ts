@@ -110,23 +110,71 @@ async function markFailed(projectId: string, error: string): Promise<void> {
 export async function scrapeProduct(url: string): Promise<ProductData> {
   const base = process.env.NEXT_PUBLIC_CREATE_BASE_URL;
   const token = process.env.ANYTHING_PROJECT_TOKEN;
-  if (!base || !token) {
-    throw new Error('Scraping service is not configured');
-  }
-
-  const scrapeRes = await fetch(`${base}/integrations/web-scraping/post`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ url, getText: true }),
-  });
+  const openaiKey = process.env.OPENAI_API_KEY;
 
   let pageText = '';
-  if (scrapeRes.ok) {
-    pageText = await scrapeRes.text();
-    pageText = pageText.slice(0, 4000);
+
+  if (base && token) {
+    // Use proxy scraping service
+    const scrapeRes = await fetch(`${base}/integrations/web-scraping/post`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ url, getText: true }),
+    });
+
+    if (scrapeRes.ok) {
+      pageText = await scrapeRes.text();
+      pageText = pageText.slice(0, 4000);
+    }
+  } else if (openaiKey) {
+    // Direct fetch fallback when proxy is not configured
+    // SSRF protection: validate the URL before fetching
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error('Invalid URL format');
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Only http and https URLs are allowed');
+    }
+
+    const hostname = parsedUrl.hostname;
+    const isPrivate =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '[::1]' ||
+      hostname === '0.0.0.0' ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^169\.254\./.test(hostname);
+
+    if (isPrivate) {
+      throw new Error('URLs pointing to private or reserved addresses are not allowed');
+    }
+
+    const scrapeRes = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (scrapeRes.ok) {
+      const html = await scrapeRes.text();
+      // Strip HTML tags to extract text content
+      pageText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      pageText = pageText.slice(0, 4000);
+    }
+  } else {
+    throw new Error('Scraping service is not configured and no AI API key is available');
   }
 
   if (!pageText) {

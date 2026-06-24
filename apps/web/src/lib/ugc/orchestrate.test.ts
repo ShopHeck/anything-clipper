@@ -134,12 +134,76 @@ describe('orchestrate', () => {
       );
     });
 
-    it('throws if scraping service is not configured', async () => {
+    it('throws if scraping service is not configured and no API key', async () => {
       delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
       delete process.env.ANYTHING_PROJECT_TOKEN;
+      delete process.env.OPENAI_API_KEY;
 
       await expect(scrapeProduct('https://example.com')).rejects.toThrow(
-        'Scraping service is not configured'
+        'Scraping service is not configured and no AI API key is available'
+      );
+    });
+
+    it('uses direct fetch fallback when proxy not configured but OPENAI_API_KEY is set', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => '<html><body><h1>Test Product</h1><p>Great item</p></body></html>',
+        });
+
+      global.fetch = mockFetch;
+
+      vi.mocked(chatCompletionJson).mockResolvedValueOnce(mockProduct);
+
+      const result = await scrapeProduct('https://tiktok.com/product/456');
+      expect(result).toEqual(mockProduct);
+      // Should call fetch with the product URL directly (not a proxy endpoint)
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://tiktok.com/product/456',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'User-Agent': expect.stringContaining('Mozilla'),
+          }),
+        })
+      );
+    });
+
+    it('rejects private/reserved hostnames on direct fetch path (SSRF protection)', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      const privateUrls = [
+        'http://localhost/secret',
+        'http://127.0.0.1/metadata',
+        'http://[::1]/internal',
+        'http://10.0.0.1/admin',
+        'http://172.16.0.1/internal',
+        'http://192.168.1.1/admin',
+        'http://169.254.169.254/latest/meta-data/',
+      ];
+
+      for (const privateUrl of privateUrls) {
+        await expect(scrapeProduct(privateUrl)).rejects.toThrow(
+          'URLs pointing to private or reserved addresses are not allowed'
+        );
+      }
+    });
+
+    it('rejects non-http/https protocols on direct fetch path', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      await expect(scrapeProduct('ftp://example.com/file')).rejects.toThrow(
+        'Only http and https URLs are allowed'
+      );
+      await expect(scrapeProduct('file:///etc/passwd')).rejects.toThrow(
+        'Only http and https URLs are allowed'
       );
     });
   });

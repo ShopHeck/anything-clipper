@@ -22,31 +22,55 @@ export interface ImageGenRequest {
  * Generate a lifestyle image using AI image generation.
  * Returns a generated image URL, or null if the service is not available
  * (allowing the pipeline to proceed with extracted product images only).
+ *
+ * Routing priority:
+ * 1. NEXT_PUBLIC_CREATE_BASE_URL proxy with ANYTHING_PROJECT_TOKEN
+ * 2. Direct OpenAI DALL-E 3 API with OPENAI_API_KEY
  */
 export async function generateImage(req: ImageGenRequest): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_CREATE_BASE_URL;
   const token = process.env.ANYTHING_PROJECT_TOKEN;
+  const openaiKey = process.env.OPENAI_API_KEY;
 
-  if (!base || !token) {
+  const prompt = `Professional product photography style: ${req.sceneContext}. Product: ${req.productDescription}. Natural lighting, high quality, realistic, clean background.`;
+
+  let url: string;
+  let headers: Record<string, string>;
+  let body: string;
+
+  if (base && token) {
+    // Route through the project proxy
+    url = `${base}/integrations/image-generation/generate`;
+    headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+    body = JSON.stringify({
+      prompt,
+      size: req.size || '1024x1792',
+      n: 1,
+    });
+  } else if (openaiKey) {
+    // Direct OpenAI DALL-E fallback
+    const imageModel = process.env.OPENAI_IMAGE_MODEL || 'dall-e-3';
+    url = 'https://api.openai.com/v1/images/generations';
+    headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${openaiKey}`,
+    };
+    body = JSON.stringify({
+      model: imageModel,
+      prompt,
+      size: req.size || '1024x1792',
+      n: 1,
+    });
+  } else {
     // Image generation not configured - return null so pipeline continues
     return null;
   }
 
-  const prompt = `Professional product photography style: ${req.sceneContext}. Product: ${req.productDescription}. Natural lighting, high quality, realistic, clean background.`;
-
   try {
-    const res = await fetch(`${base}/integrations/image-generation/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        prompt,
-        size: req.size || '1024x1792',
-        n: 1,
-      }),
-    });
+    const res = await fetch(url, { method: 'POST', headers, body });
 
     if (!res.ok) {
       console.error(`Image generation upstream returned ${res.status}`);
