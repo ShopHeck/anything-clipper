@@ -37,10 +37,32 @@ export async function POST(request: Request) {
     }
 
     // Basic URL validation
+    let parsedUrl: URL;
     try {
-      new URL(url);
+      parsedUrl = new URL(url);
     } catch {
       return Response.json({ error: 'Invalid URL format' }, { status: 400 });
+    }
+
+    // SSRF protection: only allow http/https and reject private/reserved addresses
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return Response.json({ error: 'Only http and https URLs are allowed' }, { status: 400 });
+    }
+
+    const hostname = parsedUrl.hostname;
+    const isPrivate =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '[::1]' ||
+      hostname === '0.0.0.0' ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^169\.254\./.test(hostname);
+
+    if (isPrivate) {
+      return Response.json({ error: 'URLs pointing to private or reserved addresses are not allowed' }, { status: 400 });
     }
 
     // Create ugc_projects row
