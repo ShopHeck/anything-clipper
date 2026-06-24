@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "End-to-end UGC orchestration endpoint - single API route that takes a TikTok Shop URL and orchestrates the entire pipeline: scrape product -> generate script -> generate TTS voiceover -> extract/generate visual assets -> plan scenes -> compose and render the final UGC video. Returns a job ID that can be polled for progress.",
+  "status": "completed",
+  "steps": [
+    "Create apps/web/src/lib/ugc/orchestrate.ts - the main orchestration function. Steps in sequence: (1) call product-details extraction logic (inline, not via HTTP), (2) call UGC script generation logic (inline), (3) call TTS generation (script-to-audio), (4) extract product images + generate lifestyle images, (5) plan scenes from script + timing + assets, (6) build UGC render spec, (7) compose video. Each step updates the ugc_projects row with progress status. Returns the final rendered video URL. On failure at any step, mark the ugc_project as failed with error detail.",
+    "Create apps/web/src/app/api/ugc/create/route.ts - POST endpoint accepting { url: string, voice?: string, templateStyle?: string, captionTemplate?: string }. Creates a ugc_projects row, kicks off the orchestration (either inline for MVP or queued via the same render-worker pattern). Returns { jobId, status: 'processing' }. Apply auth, rate limiting (ai.ugc-create, 5/hour for free plan), quota check.",
+    "Create apps/web/src/app/api/ugc/[id]/route.ts - GET endpoint to poll UGC job status. Returns current step progress, any intermediate results (product data, script), and final video URL when complete. Only the owning user can access their job.",
+    "Create apps/web/src/app/api/ugc/[id]/process/route.ts - POST endpoint (like render process) that actually executes the orchestration. Can be called by the user's browser or by a worker with x-render-worker-secret. This is what does the heavy lifting.",
+    "Update apps/web/src/lib/billing/plans.ts - add ugcVideosPerMonth quota to PlanQuotas (free: 3, pro: 50, business: -1). Add 'ai.ugc-create' to EVENT_TO_QUOTA mapping.",
+    "Create apps/web/src/lib/ugc/orchestrate.test.ts - unit test the orchestration step sequencing: mock all external calls (AI, TTS, storage), verify the correct order of operations, verify ugc_project status transitions, verify error handling at each step."
+  ],
+  "acceptance_criteria": [
+    "POST /api/ugc/create accepts a TikTok Shop URL and returns a job ID",
+    "GET /api/ugc/:id returns job status with progress info",
+    "POST /api/ugc/:id/process executes the full pipeline end-to-end",
+    "orchestrate.ts chains all steps: product scrape -> script -> TTS -> assets -> scene plan -> compose",
+    "Plans are updated with ugcVideosPerMonth quota",
+    "All files pass typecheck",
+    "Unit tests for orchestration logic pass"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web typecheck",
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": "All tests pass (126 passed). Typecheck clean. Used vi.hoisted pattern for SQL mock since vitest hoists vi.mock factories above variable declarations. The orchestrate module exports individual step functions (scrapeProduct, generateUGCScript, etc.) for testability."
+}
