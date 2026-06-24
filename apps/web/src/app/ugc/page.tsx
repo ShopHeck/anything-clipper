@@ -101,6 +101,9 @@ export default function UGCPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [lastStatusChange, setLastStatusChange] = useState<number | null>(null);
+  const [lastSeenStatus, setLastSeenStatus] = useState<UGCStatus | null>(null);
+  const [isStale, setIsStale] = useState(false);
 
   // Redirect to signin if not authenticated
   useEffect(() => {
@@ -130,6 +133,35 @@ export default function UGCPage() {
       return 2500;
     },
   });
+
+  // Staleness detection: if status hasn't changed in 30+ seconds, show a message
+  useEffect(() => {
+    if (!job) return;
+    const currentStatus = job.status;
+    if (currentStatus === 'completed' || currentStatus === 'failed') {
+      setIsStale(false);
+      return;
+    }
+    if (currentStatus !== lastSeenStatus) {
+      setLastSeenStatus(currentStatus);
+      setLastStatusChange(Date.now());
+      setIsStale(false);
+    }
+  }, [job, lastSeenStatus]);
+
+  useEffect(() => {
+    if (!lastStatusChange || !jobId) return;
+    if (job?.status === 'completed' || job?.status === 'failed') return;
+
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - lastStatusChange;
+      if (elapsed >= 30_000) {
+        setIsStale(true);
+      }
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [lastStatusChange, jobId, job?.status]);
 
   const handleGenerate = useCallback(async () => {
     if (!url.trim()) {
@@ -164,17 +196,29 @@ export default function UGCPage() {
 
       const { jobId: newJobId } = await createRes.json();
       setJobId(newJobId);
-      toast.success('UGC generation started!');
+      setLastStatusChange(Date.now());
+      setLastSeenStatus(null);
+      setIsStale(false);
 
-      // Step 2: Kick off processing (fire and forget - don't await)
-      fetch(`/api/ugc/${newJobId}/process`, {
+      // Step 2: Kick off processing
+      const processRes = await fetch(`/api/ugc/${newJobId}/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ voice, templateStyle }),
-      }).catch((err) => {
-        console.error('Process kick-off failed:', err);
       });
+
+      if (!processRes.ok) {
+        const processData = await processRes.json().catch(() => ({}));
+        const processError =
+          processData.error || `Failed to start processing (${processRes.status})`;
+        setSubmitError(processError);
+        toast.error(processError);
+        setJobId(null);
+        return;
+      }
+
+      toast.success('UGC generation started!');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
       setSubmitError(message);
@@ -187,6 +231,9 @@ export default function UGCPage() {
   const handleRetry = useCallback(() => {
     setJobId(null);
     setSubmitError('');
+    setLastStatusChange(null);
+    setLastSeenStatus(null);
+    setIsStale(false);
   }, []);
 
   // Determine current stage index for progress display
@@ -364,6 +411,20 @@ export default function UGCPage() {
                 );
               })}
             </div>
+
+            {/* Staleness warning */}
+            {isStale && (
+              <div className="mt-5 flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm px-4 py-3 rounded-xl">
+                <AlertCircle size={15} className="shrink-0" />
+                <span className="flex-1">Processing seems stuck - try again?</span>
+                <button
+                  onClick={handleRetry}
+                  className="text-amber-300 hover:text-amber-200 font-semibold transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
         )}
 

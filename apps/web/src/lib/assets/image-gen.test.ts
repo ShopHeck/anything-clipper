@@ -139,4 +139,23 @@ describe('generateImage', () => {
     const callBody = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
     expect(callBody.size).toBe('1024x1792');
   });
+
+  it('uses OPENAI_IMAGE_MODEL env var when set', async () => {
+    delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+    delete process.env.ANYTHING_PROJECT_TOKEN;
+    process.env.OPENAI_API_KEY = 'sk-direct';
+    process.env.OPENAI_IMAGE_MODEL = 'gpt-image-1';
+
+    const mockResponse = new Response(
+      JSON.stringify({ data: [{ url: 'https://oai-img.example.com/output.png' }] }),
+      { status: 200 }
+    );
+    vi.mocked(fetch).mockResolvedValue(mockResponse);
+
+    const result = await generateImage(baseReq);
+
+    expect(result).toBe('https://oai-img.example.com/output.png');
+    const callBody = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(callBody.model).toBe('gpt-image-1');
+  });
 });

@@ -171,6 +171,41 @@ describe('orchestrate', () => {
         })
       );
     });
+
+    it('rejects private/reserved hostnames on direct fetch path (SSRF protection)', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      const privateUrls = [
+        'http://localhost/secret',
+        'http://127.0.0.1/metadata',
+        'http://[::1]/internal',
+        'http://10.0.0.1/admin',
+        'http://172.16.0.1/internal',
+        'http://192.168.1.1/admin',
+        'http://169.254.169.254/latest/meta-data/',
+      ];
+
+      for (const privateUrl of privateUrls) {
+        await expect(scrapeProduct(privateUrl)).rejects.toThrow(
+          'URLs pointing to private or reserved addresses are not allowed'
+        );
+      }
+    });
+
+    it('rejects non-http/https protocols on direct fetch path', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      await expect(scrapeProduct('ftp://example.com/file')).rejects.toThrow(
+        'Only http and https URLs are allowed'
+      );
+      await expect(scrapeProduct('file:///etc/passwd')).rejects.toThrow(
+        'Only http and https URLs are allowed'
+      );
+    });
   });
 
   describe('generateUGCScript', () => {

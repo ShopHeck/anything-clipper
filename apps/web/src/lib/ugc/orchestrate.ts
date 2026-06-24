@@ -131,6 +131,34 @@ export async function scrapeProduct(url: string): Promise<ProductData> {
     }
   } else if (openaiKey) {
     // Direct fetch fallback when proxy is not configured
+    // SSRF protection: validate the URL before fetching
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error('Invalid URL format');
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Only http and https URLs are allowed');
+    }
+
+    const hostname = parsedUrl.hostname;
+    const isPrivate =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '[::1]' ||
+      hostname === '0.0.0.0' ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^169\.254\./.test(hostname);
+
+    if (isPrivate) {
+      throw new Error('URLs pointing to private or reserved addresses are not allowed');
+    }
+
     const scrapeRes = await fetch(url, {
       headers: {
         'User-Agent':

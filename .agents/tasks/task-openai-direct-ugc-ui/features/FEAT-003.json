@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-003",
+  "type": "fix",
+  "description": "Address code review issues: (1) Fix fire-and-forget process kick-off with error handling and staleness detection, (2) Add SSRF protection to scrapeProduct direct fetch path, (3) Verify product_details schema has additionalProperties:false, (4) Add OPENAI_IMAGE_MODEL env var.",
+  "status": "in_progress",
+  "steps": [
+    "Fix fire-and-forget in apps/web/src/app/ugc/page.tsx: await the process POST, handle errors, add 30-second staleness detection",
+    "Add SSRF protection to scrapeProduct() in apps/web/src/lib/ugc/orchestrate.ts: validate hostname, reject private IPs, reject non-http/https protocols",
+    "Verify product_details schema in orchestrate.ts has additionalProperties: false (already present, confirm)",
+    "Add OPENAI_IMAGE_MODEL env var to apps/web/src/lib/assets/image-gen.ts with default 'dall-e-3'"
+  ],
+  "acceptance_criteria": [
+    "Process POST is awaited and failures show an error message to the user",
+    "Staleness detection shows a message if status hasn't changed in 30+ seconds",
+    "scrapeProduct rejects private/reserved hostnames and non-http/https protocols",
+    "product_details schema has additionalProperties: false at top level",
+    "Image generation model is configurable via OPENAI_IMAGE_MODEL env var",
+    "All tests pass",
+    "Typecheck passes"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web typecheck",
+    "Run: cd /projects/sandbox/anything-clipper && yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}

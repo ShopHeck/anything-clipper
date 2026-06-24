@@ -51,14 +51,15 @@ export async function generateImage(req: ImageGenRequest): Promise<string | null
       n: 1,
     });
   } else if (openaiKey) {
-    // Direct OpenAI DALL-E 3 fallback
+    // Direct OpenAI DALL-E fallback
+    const imageModel = process.env.OPENAI_IMAGE_MODEL || 'dall-e-3';
     url = 'https://api.openai.com/v1/images/generations';
     headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${openaiKey}`,
     };
     body = JSON.stringify({
-      model: 'dall-e-3',
+      model: imageModel,
       prompt,
       size: req.size || '1024x1792',
       n: 1,
