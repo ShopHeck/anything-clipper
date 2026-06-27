@@ -38,6 +38,10 @@ vi.mock('@/lib/assets/image-gen', () => ({
   generateImage: vi.fn(),
 }));
 
+vi.mock('@/lib/assets/placeholder-image', () => ({
+  generatePlaceholderImage: vi.fn(),
+}));
+
 vi.mock('./compose', () => ({
   composeUGCVideo: vi.fn(),
 }));
@@ -56,6 +60,7 @@ import { chatCompletionJson } from '@/app/api/utils/ai';
 import { scriptToAudio } from '@/lib/tts/script-to-audio';
 import { processProductImages } from '@/lib/assets/product-images';
 import { generateImage } from '@/lib/assets/image-gen';
+import { generatePlaceholderImage } from '@/lib/assets/placeholder-image';
 import { composeUGCVideo } from './compose';
 
 const mockProduct: ProductData = {
@@ -273,15 +278,24 @@ describe('orchestrate', () => {
       expect(generateImage).toHaveBeenCalled();
     });
 
-    it('handles case with no image URLs', async () => {
+    it('handles case with no image URLs by generating a placeholder', async () => {
       vi.mocked(processProductImages).mockResolvedValueOnce([]);
       vi.mocked(generateImage).mockResolvedValueOnce(null);
+      vi.mocked(generatePlaceholderImage).mockResolvedValueOnce(
+        'https://storage.example.com/placeholder-images/u1/12345.png?sig=xyz'
+      );
 
       const productNoImages = { ...mockProduct, imageUrls: [] };
       const result = await gatherAssets(productNoImages, 'u1');
 
-      expect(result.productImages).toHaveLength(0);
+      // Placeholder should be added to productImages
+      expect(result.productImages).toHaveLength(1);
+      expect(result.productImages[0]).toContain('placeholder-images');
       expect(result.lifestyleImages).toHaveLength(0);
+      expect(generatePlaceholderImage).toHaveBeenCalledWith({
+        productName: mockProduct.name,
+        userId: 'u1',
+      });
     });
   });
 
@@ -498,7 +512,7 @@ describe('orchestrate', () => {
       expect(result.error).toContain('ffmpeg exited with code 1');
     });
 
-    it('aborts early when no visual assets are available', async () => {
+    it('uses placeholder image when no visual assets are available', async () => {
       mockSql.mockImplementation(async () => [{ id: 'proj-1' }]);
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -516,13 +530,26 @@ describe('orchestrate', () => {
       vi.mocked(scriptToAudio).mockResolvedValueOnce(mockTTSResult);
       // No lifestyle image generated either
       vi.mocked(generateImage).mockResolvedValueOnce(null);
+      // Placeholder is generated
+      vi.mocked(generatePlaceholderImage).mockResolvedValueOnce(
+        'https://storage.example.com/placeholder-images/u1/12345.png?sig=xyz'
+      );
+
+      vi.mocked(composeUGCVideo).mockResolvedValueOnce({
+        status: 'completed',
+        outputUrl: 'https://storage.example.com/ugc/u1/proj-1/output.mp4',
+      });
 
       const result = await orchestrateUGCVideo(orchestrateOpts);
 
-      expect(result.status).toBe('failed');
-      expect(result.error).toContain('No visual assets available');
-      // Should not reach composition step
-      expect(composeUGCVideo).not.toHaveBeenCalled();
+      // Pipeline should continue and complete instead of aborting
+      expect(result.status).toBe('completed');
+      expect(generatePlaceholderImage).toHaveBeenCalledWith({
+        productName: productNoImages.name,
+        userId: 'u1',
+      });
+      // Composition should have been called
+      expect(composeUGCVideo).toHaveBeenCalled();
     });
   });
 });
