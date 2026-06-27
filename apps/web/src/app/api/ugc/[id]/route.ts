@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const [project] = await sql`
     SELECT id, user_id, product_url, product_data, script, tts_audio_url,
-           tts_timing, video_assets, status, created_at, updated_at
+           tts_timing, video_assets, video_url, status, created_at, updated_at
     FROM ugc_projects
     WHERE id = ${id} AND user_id = ${user.id}
   `;
@@ -64,6 +64,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ttsAudioUrl,
     ttsTiming: ttsTiming ?? null,
     videoAssets: project.status === 'failed' ? null : (videoAssets ?? null),
+    videoUrl: project.video_url ?? null,
     ...(errorMessage ? { error: errorMessage } : {}),
     createdAt: project.created_at,
     updatedAt: project.updated_at,
