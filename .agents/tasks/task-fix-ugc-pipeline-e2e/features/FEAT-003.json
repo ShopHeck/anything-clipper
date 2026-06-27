@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-003",
+  "type": "fix",
+  "description": "Handle FFmpeg unavailability gracefully in compose.ts - if ffmpeg is not installed or fails to spawn, return a clear error instead of crashing. Also fix the scene image download to handle empty imageUrl gracefully.",
+  "status": "completed",
+  "steps": [
+    "In apps/web/src/lib/ugc/compose.ts, in the scene image download loop, skip scenes with empty or missing imageUrl and use the placeholder pattern: if a scene has an empty imageUrl, generate a simple 1080x1920 solid-color PNG file directly in the temp directory (just write raw PNG bytes to disk) instead of trying to download from an empty URL",
+    "In the runFfmpeg function, the 'error' event already handles spawn failures (ENOENT when ffmpeg binary not found) - verify this returns ok:false with the error message. The compose function already catches this and returns status:'failed'. This is acceptable behavior.",
+    "Add a brief console.warn when ffmpeg is not found to help users debug: 'FFmpeg not found. Install FFmpeg or set FFMPEG_PATH environment variable.'",
+    "Add a test in ffmpeg-compose.test.ts or compose.ts test that verifies a scene with empty imageUrl is handled (the buildUGCFfmpegArgs function should handle this case, OR document that upstream must never pass empty imageUrl - which we fixed in FEAT-002)"
+  ],
+  "acceptance_criteria": [
+    "Scenes with empty imageUrl do not crash the download loop in compose.ts",
+    "FFmpeg spawn failure returns a clear error message mentioning FFmpeg installation",
+    "The pipeline returns status:'failed' with a helpful error message if ffmpeg is unavailable (not an unhandled crash)",
+    "yarn workspace web typecheck passes",
+    "yarn workspace web test passes"
+  ],
+  "verification": [
+    "yarn workspace web typecheck",
+    "yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": "Imported createSolidPNG from placeholder-image.ts to reuse the PNG generation logic. The compose test uses vi.hoisted() for the spawn mock. All 164 tests pass including 2 new tests. Typecheck clean."
+}

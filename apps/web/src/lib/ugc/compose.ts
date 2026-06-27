@@ -12,6 +12,7 @@ import { buildAss, groupWordsIntoLines } from '@/lib/captions/ass';
 import type { TimedWord } from '@/lib/captions/ass';
 import { getCaptionTemplate } from '@/lib/captions/templates';
 import { ASPECT_DIMENSIONS } from '@/lib/render/types';
+import { createSolidPNG } from '@/lib/assets/placeholder-image';
 import { buildUGCFfmpegArgs } from './ffmpeg-compose';
 import type { UGCRenderSpec } from './types';
 
@@ -75,6 +76,9 @@ function runFfmpeg(
       stderrTail = (stderrTail + chunk.toString()).slice(-2000);
     });
     proc.on('error', (err) => {
+      if ('code' in err && err.code === 'ENOENT') {
+        console.warn('FFmpeg not found. Install FFmpeg or set FFMPEG_PATH environment variable.');
+      }
       resolve({ ok: false, stderrTail: `${err.message}\n${stderrTail}` });
     });
     proc.on('close', (code) => {
@@ -115,10 +119,19 @@ export async function composeUGCVideo(opts: ComposeOptions): Promise<UGCComposeR
     // Download scene images
     const sceneImagePaths: string[] = [];
     for (let i = 0; i < spec.scenes.length; i++) {
-      const ext = spec.scenes[i].imageUrl.match(/\.(png|jpg|jpeg|webp)/i)?.[1] ?? 'jpg';
-      const imgPath = path.join(workDir, `scene_${i}.${ext}`);
-      await downloadFile(spec.scenes[i].imageUrl, imgPath);
-      sceneImagePaths.push(imgPath);
+      const imageUrl = spec.scenes[i].imageUrl;
+      if (!imageUrl) {
+        // No image URL available - generate a solid-color placeholder PNG
+        const imgPath = path.join(workDir, `scene_${i}.png`);
+        const pngBuffer = createSolidPNG(1080, 1920, [0x1a, 0x1a, 0x2e]);
+        await writeFile(imgPath, pngBuffer);
+        sceneImagePaths.push(imgPath);
+      } else {
+        const ext = imageUrl.match(/\.(png|jpg|jpeg|webp)/i)?.[1] ?? 'jpg';
+        const imgPath = path.join(workDir, `scene_${i}.${ext}`);
+        await downloadFile(imageUrl, imgPath);
+        sceneImagePaths.push(imgPath);
+      }
     }
 
     // Download background music (if provided)

@@ -1,0 +1,33 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix image-gen.ts to handle gpt-image-2 base64 response format (b64_json) by uploading the decoded image to R2 storage and returning its presigned URL",
+  "status": "completed",
+  "steps": [
+    "In apps/web/src/lib/assets/image-gen.ts, update the generateImage function to accept a userId parameter (needed for building storage keys)",
+    "Update the OpenAI direct path to include response_format: 'b64_json' in the request body when calling gpt-image-2 (this model returns b64_json, not URLs)",
+    "After receiving the response, check for BOTH data[0].url AND data[0].b64_json. If b64_json is present, decode the base64 string to a Buffer, upload it to R2 using presignUpload (following the pattern in product-images.ts and script-to-audio.ts), then return the presigned download URL",
+    "The storage key pattern should be: `generated-images/<userId>/<timestamp>.png`",
+    "Import presignUpload and presignDownload from @/app/api/utils/storage",
+    "Update the ImageGenRequest interface to include an optional userId field",
+    "Update the call site in orchestrate.ts gatherAssets function to pass userId to generateImage",
+    "Update apps/web/src/lib/assets/image-gen.test.ts to add tests for the b64_json response path: (a) successfully decodes and returns a storage URL when b64_json is present, (b) handles both url and b64_json fields (url takes priority for backward compat with dall-e-3)",
+    "Ensure all existing tests still pass by updating any affected assertions"
+  ],
+  "acceptance_criteria": [
+    "generateImage handles gpt-image-2 responses where data[0].b64_json contains base64 PNG data",
+    "The base64 data is decoded and uploaded to R2 storage via presignUpload/PUT",
+    "A presigned download URL is returned instead of null",
+    "The function still works with dall-e-3 URL responses (backward compatible)",
+    "The function still returns null gracefully on errors (no throwing)",
+    "New unit tests cover the b64_json path",
+    "yarn workspace web typecheck passes",
+    "yarn workspace web test passes"
+  ],
+  "verification": [
+    "yarn workspace web typecheck",
+    "yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": "All 153 tests pass. The presignUpload/presignDownload mocks in the test file use vi.mock at module level to avoid loading the real crypto-based storage module. The orchestrate.test.ts already had generateImage mocked so it was unaffected by the signature change. Review fixes applied: added crypto.randomUUID() suffix to storage keys to prevent Date.now() collisions, and wrapped generatePlaceholderImage in try/catch in gatherAssets so storage outages during fallback do not crash the pipeline."
+}

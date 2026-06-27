@@ -1,0 +1,27 @@
+{
+  "project_type": "Next.js 16 monorepo web app (apps/web)",
+  "language": "TypeScript",
+  "build_system": "Yarn 4 workspaces with Next.js",
+  "test_framework": "Vitest with vi.mock, vi.fn patterns. Tests co-located with source files as *.test.ts",
+  "build_command": "yarn workspace web typecheck",
+  "test_command": "yarn workspace web test",
+  "verification_instructions": "1. Run yarn workspace web typecheck. 2. Run yarn workspace web test. Both must pass.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "corepack enable && yarn workspaces focus web",
+  "environment_constraints": "No docker daemon available. Network available for npm packages. FFmpeg is available (CI installs it).",
+  "contribution_requirements": "Branch from current branch fix/openai-strict-schema. TypeScript strict mode. Tests required.",
+  "key_patterns": "- Storage uses SigV4 presigning (apps/web/src/app/api/utils/storage.ts) with presignUpload/presignDownload. - TTS upload pattern: generate buffer -> presignUpload(key) -> PUT body -> presignDownload(key). - Image gen returns string URL or null. - Pipeline functions are tested with vi.mock for external deps. - The orchestrate pipeline updates DB status at each step.",
+  "relevant_files": [
+    "apps/web/src/lib/assets/image-gen.ts",
+    "apps/web/src/lib/assets/image-gen.test.ts",
+    "apps/web/src/lib/ugc/orchestrate.ts",
+    "apps/web/src/lib/ugc/orchestrate.test.ts",
+    "apps/web/src/lib/ugc/compose.ts",
+    "apps/web/src/lib/assets/product-images.ts",
+    "apps/web/src/lib/assets/scene-planner.ts",
+    "apps/web/src/lib/assets/types.ts",
+    "apps/web/src/app/api/utils/storage.ts",
+    "apps/web/src/lib/tts/script-to-audio.ts"
+  ],
+  "directory_structure": "Monorepo: apps/web is the Next.js app. Key paths: src/lib/assets/ (image handling), src/lib/ugc/ (video pipeline), src/lib/tts/ (text-to-speech), src/app/api/utils/ (storage, AI helpers)."
+}

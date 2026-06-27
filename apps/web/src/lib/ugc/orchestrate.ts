@@ -6,6 +6,7 @@ import { chatCompletionJson } from '@/app/api/utils/ai';
 import sql from '@/app/api/utils/sql';
 import { presignDownload } from '@/app/api/utils/storage';
 import { generateImage } from '@/lib/assets/image-gen';
+import { generatePlaceholderImage } from '@/lib/assets/placeholder-image';
 import { processProductImages } from '@/lib/assets/product-images';
 import { planScenes } from '@/lib/assets/scene-planner';
 import type { ProductAssets, ScenePlan } from '@/lib/assets/types';
@@ -310,9 +311,26 @@ export async function gatherAssets(
     productDescription: `${product.name} - ${(product.features ?? []).slice(0, 2).join(', ')}`,
     sceneContext: `Person happily using ${product.name} in a natural setting, authentic UGC style`,
     size: '1024x1792',
+    userId,
   });
   if (lifestyleImg) {
     assets.lifestyleImages.push(lifestyleImg);
+  }
+
+  // Fallback: if no images at all, generate a placeholder so the pipeline never aborts
+  if (assets.productImages.length === 0 && assets.lifestyleImages.length === 0) {
+    try {
+      const placeholderUrl = await generatePlaceholderImage({
+        productName: product.name,
+        userId,
+      });
+      assets.productImages.push(placeholderUrl);
+    } catch (err) {
+      console.warn(
+        'Placeholder image upload failed; compose will generate a local fallback:',
+        err instanceof Error ? err.message : err
+      );
+    }
   }
 
   return assets;
@@ -406,14 +424,6 @@ export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<Orc
 
     // Step 4: Gather visual assets
     const assets = await gatherAssets(product, userId);
-
-    // Abort early if no visual assets are available (empty imageUrl would crash FFmpeg)
-    if (assets.productImages.length === 0 && assets.lifestyleImages.length === 0) {
-      const noAssetsError =
-        'No visual assets available for this product. The product page may not contain images, and image generation was unavailable.';
-      await markFailed(projectId, noAssetsError);
-      return { status: 'failed', error: noAssetsError };
-    }
 
     await updateProjectStatus(projectId, 'planning_scenes', {
       video_assets: assets,
