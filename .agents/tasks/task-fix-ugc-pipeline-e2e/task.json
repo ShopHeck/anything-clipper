@@ -9,6 +9,6 @@
     "tests": "pass",
     "test_quality": "pass",
     "docker_build": "skipped",
-    "summary": "typecheck passes, 165 tests pass (17 new tests added), 1 skipped smoke test. Review fixes applied: Date.now() key collisions resolved with crypto.randomUUID() suffix, and generatePlaceholderImage wrapped in try/catch so storage outages degrade gracefully instead of crashing the pipeline."
+    "summary": "typecheck passes, 165 tests pass (17 new tests added across 3 new test files and 2 updated test files), 1 skipped smoke test. Semantic review v2 APPROVED."
   }
 }

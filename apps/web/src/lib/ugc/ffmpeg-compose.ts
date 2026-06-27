@@ -95,7 +95,13 @@ function buildDrawtextFilter(
 
 // Escape file paths for use in ffmpeg filtergraph expressions.
 function escapeFilterPath(p: string): string {
-  return p.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
+  return p
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, "\\'")
+    .replace(/ /g, '\\ ')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]');
 }
 
 /**
@@ -170,7 +176,7 @@ export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
 
   // Burn ASS captions if provided
   if (assPath) {
-    filterParts.push(`[vraw]ass='${escapeFilterPath(assPath)}'[v]`);
+    filterParts.push(`[vraw]ass=${escapeFilterPath(assPath)}[v]`);
   } else {
     filterParts.push(`[vraw]null[v]`);
   }
