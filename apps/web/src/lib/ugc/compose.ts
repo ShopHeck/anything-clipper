@@ -151,25 +151,8 @@ export async function composeUGCVideo(opts: ComposeOptions): Promise<UGCComposeR
       throw new Error('Video duration too short - check TTS audio and scene timing.');
     }
 
-    // Generate ASS captions from word-level timing
-    let assPath: string | undefined;
-    if (spec.captions.length > 0) {
-      const [width, height] = ASPECT_DIMENSIONS[spec.aspect];
-      const timedWords: TimedWord[] = spec.captions.map((w) => ({
-        text: w.text,
-        start: w.start,
-        end: w.end,
-      }));
-      const lines = groupWordsIntoLines(timedWords);
-      const ass = buildAss(lines, {
-        template: getCaptionTemplate(spec.captionTemplateId),
-        playResX: width,
-        playResY: height,
-        position: spec.captionPosition,
-      });
-      assPath = path.join(workDir, 'captions.ass');
-      await writeFile(assPath, ass, 'utf8');
-    }
+    // Captions disabled — clean video with voiceover + images only
+    const assPath: string | undefined = undefined;
 
     // Build ffmpeg args
     const outPath = path.join(workDir, 'output.mp4');

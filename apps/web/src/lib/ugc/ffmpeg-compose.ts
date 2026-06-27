@@ -155,16 +155,7 @@ export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
 
     let sceneFilters = `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${zoompanFilter},setpts=PTS-STARTPTS`;
 
-    // Add text overlay if present
-    if (scene.overlayText) {
-      const drawtextFilter = buildDrawtextFilter(
-        scene.overlayText,
-        scene.overlayPosition ?? 'bottom',
-        width,
-        height
-      );
-      sceneFilters += `,${drawtextFilter}`;
-    }
+    // Text overlays disabled — clean video without on-screen text
 
     sceneFilters += `[scene${i}]`;
     filterParts.push(sceneFilters);
