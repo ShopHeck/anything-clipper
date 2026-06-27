@@ -1,0 +1,7 @@
+{
+  "task_id": "task-fix-ugc-pipeline-e2e",
+  "task_description": "Fix the UGC video generation pipeline end-to-end: handle gpt-image-2 b64_json responses, add placeholder image fallback so the pipeline never aborts on missing assets, and handle FFmpeg/empty-URL edge cases gracefully.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

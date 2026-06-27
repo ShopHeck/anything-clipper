@@ -310,6 +310,7 @@ export async function gatherAssets(
     productDescription: `${product.name} - ${(product.features ?? []).slice(0, 2).join(', ')}`,
     sceneContext: `Person happily using ${product.name} in a natural setting, authentic UGC style`,
     size: '1024x1792',
+    userId,
   });
   if (lifestyleImg) {
     assets.lifestyleImages.push(lifestyleImg);

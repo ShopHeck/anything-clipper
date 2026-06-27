@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Add placeholder image generation so the pipeline never aborts due to missing visual assets. When no product images can be scraped and AI image generation fails, generate a simple colored placeholder image locally (using raw PNG/Buffer creation without external deps like canvas/sharp) and upload it to R2 so the video always completes.",
+  "status": "pending",
+  "steps": [
+    "Create a new file apps/web/src/lib/assets/placeholder-image.ts that exports a function generatePlaceholderImage(opts: { productName: string; userId: string; width?: number; height?: number }): Promise<string> which creates a minimal valid PNG image (solid color) in memory, uploads it to R2, and returns the presigned download URL. Use a raw buffer approach to create a valid PNG without needing canvas or sharp (a simple 1080x1920 solid-color PNG can be generated using raw IDAT/deflate).",
+    "The placeholder should be a simple solid color image (e.g., a dark gradient-like solid #1a1a2e or branded color). Since we cannot easily do text rendering without canvas/sharp, a solid color background is sufficient - the overlay text from scene-planner will add text on top during FFmpeg composition.",
+    "In apps/web/src/lib/ugc/orchestrate.ts, modify the gatherAssets function: after the existing image gathering logic, if BOTH productImages and lifestyleImages are empty, call generatePlaceholderImage to create a fallback and add it to productImages",
+    "Remove the early abort check in orchestrateUGCVideo that returns 'failed' when no assets are found (the pipeline should never fail just because of missing images now)",
+    "Update the orchestrate.test.ts test 'aborts early when no visual assets are available' to instead verify the pipeline continues with a placeholder (or replace with a test that verifies placeholder generation is called)",
+    "Add a test file apps/web/src/lib/assets/placeholder-image.test.ts that verifies: (a) the function returns a presigned URL string, (b) it calls presignUpload and fetch PUT, (c) the generated buffer is a valid PNG (starts with PNG magic bytes)",
+    "Ensure the compose.ts downloadFile function can handle the presigned URLs returned by the placeholder (it already handles any HTTP URL, so this should work)"
+  ],
+  "acceptance_criteria": [
+    "When no product images are scraped and AI image generation returns null, a placeholder image is generated and uploaded to R2",
+    "The pipeline no longer aborts/fails due to missing visual assets",
+    "The placeholder is a valid PNG file that FFmpeg can process",
+    "The orchestrate function proceeds to scene planning and composition even with only the placeholder",
+    "All existing tests pass (with the abort test updated)",
+    "New tests verify placeholder generation logic",
+    "yarn workspace web typecheck passes",
+    "yarn workspace web test passes"
+  ],
+  "verification": [
+    "yarn workspace web typecheck",
+    "yarn workspace web test"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
