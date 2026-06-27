@@ -65,7 +65,7 @@ export async function chatCompletion(
               type: 'json_schema',
               json_schema: {
                 name: jsonSchema.name,
-                strict: true,
+                strict: false,
                 schema: jsonSchema.schema,
               },
             },
