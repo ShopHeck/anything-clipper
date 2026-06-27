@@ -48,6 +48,7 @@ interface UGCJob {
   } | null;
   ttsAudioUrl: string | null;
   videoAssets: Record<string, unknown> | null;
+  videoUrl: string | null;
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -478,10 +479,10 @@ export default function UGCPage() {
             </div>
 
             {/* Video link */}
-            {job.videoAssets && !!(job.videoAssets as Record<string, unknown>).videoUrl && (
+            {job.videoUrl && (
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
                 <a
-                  href={String((job.videoAssets as Record<string, unknown>).videoUrl)}
+                  href={job.videoUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold text-sm px-6 py-3 rounded-xl transition-all hover:shadow-lg hover:shadow-violet-500/25"
@@ -489,7 +490,7 @@ export default function UGCPage() {
                   <Play size={16} /> Watch Video
                 </a>
                 <a
-                  href={String((job.videoAssets as Record<string, unknown>).videoUrl)}
+                  href={job.videoUrl}
                   download
                   className="flex items-center gap-2 bg-white/6 hover:bg-white/10 border border-white/10 text-white/70 font-semibold text-sm px-6 py-3 rounded-xl transition-all"
                 >

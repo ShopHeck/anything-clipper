@@ -458,7 +458,7 @@ export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<Orc
 
     // Mark completed
     const videoUrl = composeResult.outputUrl ?? composeResult.outputPath ?? '';
-    await sql`UPDATE ugc_projects SET status = 'completed', updated_at = NOW() WHERE id = ${projectId}`;
+    await sql`UPDATE ugc_projects SET status = 'completed', video_url = ${videoUrl}, updated_at = NOW() WHERE id = ${projectId}`;
 
     return { status: 'completed', videoUrl };
   } catch (err) {
