@@ -12,6 +12,7 @@ import { planScenes } from '@/lib/assets/scene-planner';
 import type { ProductAssets, ScenePlan } from '@/lib/assets/types';
 import { scriptToAudio } from '@/lib/tts/script-to-audio';
 import type { ScriptToAudioResult, SectionTiming, TTSVoice, UGCScript } from '@/lib/tts/types';
+import puppeteer from 'puppeteer';
 import { captionsFromScript } from './captions-from-script';
 import { composeUGCVideo } from './compose';
 import type { UGCRenderSpec, UGCScene } from './types';
@@ -131,8 +132,8 @@ export async function scrapeProduct(url: string): Promise<ProductData> {
       pageText = pageText.slice(0, 4000);
     }
   } else if (openaiKey) {
-    // Direct fetch fallback when proxy is not configured
-    // SSRF protection: validate the URL before fetching
+    // Puppeteer-based scraping for JavaScript-rendered pages (e.g. TikTok Shop)
+    // SSRF protection: validate the URL before launching a browser
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(url);
@@ -160,19 +161,38 @@ export async function scrapeProduct(url: string): Promise<ProductData> {
       throw new Error('URLs pointing to private or reserved addresses are not allowed');
     }
 
-    const scrapeRes = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
-    });
+    let extractedImageUrls: string[] = [];
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    try {
+      const page = await browser.newPage();
+      await page.setUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      );
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    if (scrapeRes.ok) {
-      const html = await scrapeRes.text();
-      // Strip HTML tags to extract text content
-      pageText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-      pageText = pageText.slice(0, 4000);
+      // Wait for main content to render
+      await page.waitForSelector('body', { timeout: 10000 }).catch(() => {});
+
+      // Extract page text and image URLs
+      const extracted = await page.evaluate(() => {
+        const text = document.body?.innerText ?? '';
+        const images = Array.from(document.querySelectorAll('img'));
+        const imgSrcs = images
+          .map((img) => img.src)
+          .filter((src) => src && src.startsWith('http'));
+        return { text, imgSrcs };
+      });
+
+      pageText = (extracted.text ?? '').slice(0, 4000);
+      extractedImageUrls = extracted.imgSrcs ?? [];
+    } finally {
+      await browser.close();
+    }
+
+    // Include extracted image URLs in the GPT prompt below
+    if (extractedImageUrls.length > 0) {
+      const imageUrlsList = extractedImageUrls.slice(0, 20).join('\n');
+      pageText += `\n\nImage URLs found on page:\n${imageUrlsList}`;
     }
   } else {
     throw new Error('Scraping service is not configured and no AI API key is available');
