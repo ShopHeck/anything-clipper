@@ -297,6 +297,22 @@ describe('orchestrate', () => {
         userId: 'u1',
       });
     });
+
+    it('continues gracefully when placeholder image upload fails', async () => {
+      vi.mocked(processProductImages).mockResolvedValueOnce([]);
+      vi.mocked(generateImage).mockResolvedValueOnce(null);
+      vi.mocked(generatePlaceholderImage).mockRejectedValueOnce(
+        new Error('Failed to upload placeholder image (503)')
+      );
+
+      const productNoImages = { ...mockProduct, imageUrls: [] };
+      const result = await gatherAssets(productNoImages, 'u1');
+
+      // Pipeline should not crash; assets will be empty and compose handles it
+      expect(result.productImages).toHaveLength(0);
+      expect(result.lifestyleImages).toHaveLength(0);
+      expect(generatePlaceholderImage).toHaveBeenCalled();
+    });
   });
 
   describe('buildScenePlan', () => {

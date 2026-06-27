@@ -3,6 +3,8 @@
 // a DALL-E/image generation endpoint.
 // Supports both URL responses (dall-e-3) and b64_json responses (gpt-image-2).
 
+import crypto from 'node:crypto';
+
 import { presignDownload, presignUpload } from '@/app/api/utils/storage';
 
 export class ImageGenUnavailableError extends Error {
@@ -125,7 +127,8 @@ async function uploadBase64Image(b64Data: string, userId?: string): Promise<stri
   try {
     const buffer = Buffer.from(b64Data, 'base64');
     const userPrefix = userId || 'anonymous';
-    const storageKey = `generated-images/${userPrefix}/${Date.now()}.png`;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const storageKey = `generated-images/${userPrefix}/${Date.now()}-${suffix}.png`;
 
     const uploadUrl = presignUpload(storageKey, 3600);
     const uploadRes = await fetch(uploadUrl, {

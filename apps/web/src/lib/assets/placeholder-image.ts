@@ -3,6 +3,7 @@
 // can be scraped and AI image generation fails, ensuring the video pipeline
 // always has at least one visual asset for FFmpeg composition.
 
+import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 
 import { presignDownload, presignUpload } from '@/app/api/utils/storage';
@@ -34,7 +35,8 @@ export async function generatePlaceholderImage(
 
   const pngBuffer = createSolidPNG(width, height, [0x1a, 0x1a, 0x2e]);
 
-  const storageKey = `placeholder-images/${userId}/${Date.now()}.png`;
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const storageKey = `placeholder-images/${userId}/${Date.now()}-${suffix}.png`;
   const uploadUrl = presignUpload(storageKey, 3600);
 
   const uploadRes = await fetch(uploadUrl, {

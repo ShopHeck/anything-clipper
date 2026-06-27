@@ -319,11 +319,18 @@ export async function gatherAssets(
 
   // Fallback: if no images at all, generate a placeholder so the pipeline never aborts
   if (assets.productImages.length === 0 && assets.lifestyleImages.length === 0) {
-    const placeholderUrl = await generatePlaceholderImage({
-      productName: product.name,
-      userId,
-    });
-    assets.productImages.push(placeholderUrl);
+    try {
+      const placeholderUrl = await generatePlaceholderImage({
+        productName: product.name,
+        userId,
+      });
+      assets.productImages.push(placeholderUrl);
+    } catch (err) {
+      console.warn(
+        'Placeholder image upload failed; compose will generate a local fallback:',
+        err instanceof Error ? err.message : err
+      );
+    }
   }
 
   return assets;

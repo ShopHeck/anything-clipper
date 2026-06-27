@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Fix image-gen.ts to handle gpt-image-2 base64 response format (b64_json) by uploading the decoded image to R2 storage and returning its presigned URL",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "In apps/web/src/lib/assets/image-gen.ts, update the generateImage function to accept a userId parameter (needed for building storage keys)",
     "Update the OpenAI direct path to include response_format: 'b64_json' in the request body when calling gpt-image-2 (this model returns b64_json, not URLs)",
@@ -29,5 +29,5 @@
     "yarn workspace web test"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 153 tests pass. The presignUpload/presignDownload mocks in the test file use vi.mock at module level to avoid loading the real crypto-based storage module. The orchestrate.test.ts already had generateImage mocked so it was unaffected by the signature change. Review fixes applied: added crypto.randomUUID() suffix to storage keys to prevent Date.now() collisions, and wrapped generatePlaceholderImage in try/catch in gatherAssets so storage outages during fallback do not crash the pipeline."
 }
