@@ -131,7 +131,7 @@ describe('buildUGCFfmpegArgs', () => {
       totalDurationSec: 20,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
-    expect(graph).toContain("ass=/tmp/captions.ass");
+    expect(graph).toContain("subtitles=filename=/tmp/captions.ass");
   });
 
   it('passes through without ASS when no assPath', () => {

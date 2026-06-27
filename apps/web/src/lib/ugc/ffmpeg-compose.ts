@@ -176,7 +176,8 @@ export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
 
   // Burn ASS captions if provided
   if (assPath) {
-    filterParts.push(`[vraw]ass=${escapeFilterPath(assPath)}[v]`);
+    // Use the subtitles filter which handles paths more reliably across platforms
+    filterParts.push(`[vraw]subtitles=filename=${escapeFilterPath(assPath)}[v]`);
   } else {
     filterParts.push(`[vraw]null[v]`);
   }
