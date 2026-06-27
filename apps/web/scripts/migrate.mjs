@@ -38,7 +38,7 @@ for (const file of files) {
   console.log(`Applying ${file}…`);
   const text = await readFile(path.join(dir, file), 'utf8');
   for (const statement of splitStatements(text)) {
-    await sql.query(statement);
+    await sql(statement);
   }
   await sql`INSERT INTO _migrations (name) VALUES (${file})`;
 }
