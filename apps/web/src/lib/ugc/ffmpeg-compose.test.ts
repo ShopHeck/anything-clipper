@@ -6,8 +6,8 @@ const baseSpec: UGCRenderSpec = {
   ttsAudioUrl: 'https://example.com/voiceover.mp3',
   scenes: [
     { startSec: 0, endSec: 5, imageUrl: 'https://example.com/img1.jpg' },
-    { startSec: 5, endSec: 12, imageUrl: 'https://example.com/img2.jpg' },
-    { startSec: 12, endSec: 20, imageUrl: 'https://example.com/img3.jpg' },
+    { startSec: 5, endSec: 10, imageUrl: 'https://example.com/img2.jpg' },
+    { startSec: 10, endSec: 15, imageUrl: 'https://example.com/img3.jpg' },
   ],
   captions: [],
   aspect: '9:16',
@@ -21,14 +21,14 @@ describe('buildZoompanFilter', () => {
     expect(filter).toContain('d=150');
     expect(filter).toContain('s=1080x1920');
     expect(filter).toContain('fps=30');
-    expect(filter).toContain('1.15');
+    expect(filter).toContain('1.25');
   });
 
   it('generates zoom-out filter', () => {
     const filter = buildZoompanFilter('out', 210, 1080, 1920);
     expect(filter).toContain('zoompan=');
     expect(filter).toContain('d=210');
-    expect(filter).toContain('1.15');
+    expect(filter).toContain('1.25');
     expect(filter).toContain('max(');
   });
 
@@ -53,7 +53,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const joined = args.join(' ');
     expect(joined).toContain('-c:v libx264');
@@ -72,15 +72,15 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const joined = args.join(' ');
     // First scene: 5 seconds
     expect(joined).toContain('-loop 1 -t 5 -i /tmp/img1.jpg');
-    // Second scene: 7 seconds
-    expect(joined).toContain('-loop 1 -t 7 -i /tmp/img2.jpg');
-    // Third scene: 8 seconds
-    expect(joined).toContain('-loop 1 -t 8 -i /tmp/img3.jpg');
+    // Second scene: 5 seconds
+    expect(joined).toContain('-loop 1 -t 5 -i /tmp/img2.jpg');
+    // Third scene: 5 seconds
+    expect(joined).toContain('-loop 1 -t 5 -i /tmp/img3.jpg');
   });
 
   it('includes TTS audio as input', () => {
@@ -89,7 +89,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     expect(args).toContain('/tmp/voice.mp3');
   });
@@ -100,7 +100,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
     expect(graph).toContain('zoompan=');
@@ -115,7 +115,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
     expect(graph).toContain('[scene0][scene1][scene2]concat=n=3:v=1:a=0[vraw]');
@@ -128,7 +128,7 @@ describe('buildUGCFfmpegArgs', () => {
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       assPath: '/tmp/captions.ass',
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
     expect(graph).toContain("subtitles=filename=/tmp/captions.ass");
@@ -140,7 +140,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
     expect(graph).toContain('[vraw]null[v]');
@@ -158,7 +158,7 @@ describe('buildUGCFfmpegArgs', () => {
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       musicPath: '/tmp/music.mp3',
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const joined = args.join(' ');
     expect(joined).toContain('-stream_loop -1 -i /tmp/music.mp3');
@@ -178,7 +178,7 @@ describe('buildUGCFfmpegArgs', () => {
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       musicPath: '/tmp/music.mp3',
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
     expect(graph).toContain('volume=0.15[bed]');
@@ -222,7 +222,7 @@ describe('buildUGCFfmpegArgs', () => {
       totalDurationSec: 10,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
-    // Zoom out uses 'max' to decrease from 1.15 to 1.0
+    // Zoom out uses 'max' to decrease from 1.25 to 1.0
     expect(graph).toContain('max(');
     // Pan-left uses fixed zoom '1.1'
     expect(graph).toContain("z='1.1'");
@@ -260,7 +260,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     const graph = args[args.indexOf('-filter_complex') + 1];
     expect(graph).toContain('scale=1080:1920');
@@ -273,7 +273,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     expect(args).toContain('-shortest');
   });
@@ -284,7 +284,7 @@ describe('buildUGCFfmpegArgs', () => {
       ttsAudioPath: '/tmp/voice.mp3',
       sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
-      totalDurationSec: 20,
+      totalDurationSec: 15,
     });
     expect(args).toContain('-map');
     expect(args).toContain('[v]');

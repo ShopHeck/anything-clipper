@@ -15,11 +15,8 @@ const mockAssets: ProductAssets = {
 };
 
 const mockScript = {
-  hook: 'Stop scrolling! You need to see this.',
-  problem: 'Tired of bad skin?',
-  solution: 'This serum changed everything.',
-  demo: 'Watch how easy it is to apply.',
-  socialProof: '5000 five-star reviews.',
+  hook: 'Stop scrolling! You need this.',
+  keyPoints: 'This serum hydrates instantly and fights aging.',
   cta: 'Get yours before the sale ends!',
 };
 
@@ -34,12 +31,9 @@ const mockProductData = {
 
 // Simulates TTS timings with pauses between sections
 const mockTimings = [
-  { section: 'hook', startSec: 0, endSec: 2.5 },
-  { section: 'problem', startSec: 3.1, endSec: 4.5 },
-  { section: 'solution', startSec: 5.1, endSec: 7.0 },
-  { section: 'demo', startSec: 7.6, endSec: 9.5 },
-  { section: 'socialProof', startSec: 10.1, endSec: 12.0 },
-  { section: 'cta', startSec: 12.6, endSec: 14.5 },
+  { section: 'hook', startSec: 0, endSec: 4.0 },
+  { section: 'keyPoints', startSec: 4.3, endSec: 10.0 },
+  { section: 'cta', startSec: 10.3, endSec: 14.5 },
 ];
 
 function buildInput(overrides?: Partial<ScenePlannerInput>): ScenePlannerInput {
@@ -60,7 +54,7 @@ describe('planScenes', () => {
 
   it('produces a scene for every timing section', () => {
     const result = planScenes(buildInput());
-    expect(result).toHaveLength(6);
+    expect(result).toHaveLength(3);
   });
 
   it('covers the full TTS duration with no gaps', () => {
@@ -82,13 +76,13 @@ describe('planScenes', () => {
   it('fills pauses between sections by extending previous scene', () => {
     const result = planScenes(buildInput());
 
-    // The hook scene (0-2.5) should be extended to cover the pause until problem (3.1)
+    // The hook scene (0-4.0) should be extended to cover the pause until keyPoints (4.3)
     expect(result[0].startSec).toBe(0);
-    expect(result[0].endSec).toBe(3.1); // Extended to fill the gap
+    expect(result[0].endSec).toBe(4.3); // Extended to fill the gap
 
-    // Problem scene starts at 3.1
-    expect(result[1].startSec).toBe(3.1);
-    expect(result[1].endSec).toBe(5.1); // Extended to fill gap before solution
+    // keyPoints scene starts at 4.3
+    expect(result[1].startSec).toBe(4.3);
+    expect(result[1].endSec).toBe(10.3); // Extended to fill gap before cta
   });
 
   it('assigns correct asset types per script section', () => {
@@ -96,16 +90,10 @@ describe('planScenes', () => {
 
     // hook -> product-image
     expect(result[0].type).toBe('product-image');
-    // problem -> lifestyle
+    // keyPoints -> lifestyle
     expect(result[1].type).toBe('lifestyle');
-    // solution -> lifestyle
-    expect(result[2].type).toBe('lifestyle');
-    // demo -> product-image
-    expect(result[3].type).toBe('product-image');
-    // socialProof -> text-overlay
-    expect(result[4].type).toBe('text-overlay');
     // cta -> text-overlay
-    expect(result[5].type).toBe('text-overlay');
+    expect(result[2].type).toBe('text-overlay');
   });
 
   it('assigns product image URLs to product-image scenes', () => {
@@ -123,7 +111,7 @@ describe('planScenes', () => {
     const result = planScenes(buildInput());
 
     const lifestyleScenes = result.filter((s) => s.type === 'lifestyle');
-    expect(lifestyleScenes.length).toBe(2);
+    expect(lifestyleScenes.length).toBe(1);
     for (const scene of lifestyleScenes) {
       expect(scene.assetUrl).toBeDefined();
       expect(scene.assetUrl).toContain('lifestyle-');
@@ -134,15 +122,10 @@ describe('planScenes', () => {
     const result = planScenes(buildInput());
 
     const textScenes = result.filter((s) => s.type === 'text-overlay');
-    expect(textScenes.length).toBe(2);
-
-    // socialProof overlay should have rating/sold info
-    const socialScene = textScenes[0];
-    expect(socialScene.overlayText).toContain('4.8');
-    expect(socialScene.overlayText).toContain('12.4K+');
+    expect(textScenes.length).toBe(1);
 
     // CTA overlay should have product name and price
-    const ctaScene = textScenes[1];
+    const ctaScene = textScenes[0];
     expect(ctaScene.overlayText).toContain('Glow Serum');
     expect(ctaScene.overlayText).toContain('$24.99');
     expect(ctaScene.overlayText).toContain('50%');
@@ -179,15 +162,11 @@ describe('planScenes', () => {
     // With 3 product images and multiple product-image scenes
     const timings = [
       { section: 'hook', startSec: 0, endSec: 2 },
-      { section: 'demo', startSec: 2, endSec: 4 },
-      { section: 'cta', startSec: 4, endSec: 6 },
+      { section: 'cta', startSec: 2, endSec: 4 },
     ];
     const minScript = {
       hook: 'a',
-      problem: '',
-      solution: '',
-      demo: 'b',
-      socialProof: '',
+      keyPoints: '',
       cta: 'c',
     };
 
@@ -195,10 +174,9 @@ describe('planScenes', () => {
       buildInput({ timings, script: minScript })
     );
 
-    // hook uses product-1, demo uses product-2, cta uses product-3
+    // hook uses product-1, cta (text-overlay) uses product-2
     expect(result[0].assetUrl).toBe('https://storage.example.com/product-1.jpg');
     expect(result[1].assetUrl).toBe('https://storage.example.com/product-2.jpg');
-    expect(result[2].assetUrl).toBe('https://storage.example.com/product-3.jpg');
   });
 
   it('produces valid timing for all scenes (startSec < endSec)', () => {
@@ -211,21 +189,18 @@ describe('planScenes', () => {
 
   it('handles timings with no gaps (continuous sections)', () => {
     const continuousTimings = [
-      { section: 'hook', startSec: 0, endSec: 2 },
-      { section: 'problem', startSec: 2, endSec: 4 },
-      { section: 'solution', startSec: 4, endSec: 6 },
-      { section: 'demo', startSec: 6, endSec: 8 },
-      { section: 'socialProof', startSec: 8, endSec: 10 },
-      { section: 'cta', startSec: 10, endSec: 12 },
+      { section: 'hook', startSec: 0, endSec: 5 },
+      { section: 'keyPoints', startSec: 5, endSec: 10 },
+      { section: 'cta', startSec: 10, endSec: 15 },
     ];
 
     const result = planScenes(buildInput({ timings: continuousTimings }));
-    expect(result).toHaveLength(6);
+    expect(result).toHaveLength(3);
 
     // No extension needed since no gaps
-    expect(result[0].endSec).toBe(2);
-    expect(result[1].startSec).toBe(2);
-    expect(result[1].endSec).toBe(4);
+    expect(result[0].endSec).toBe(5);
+    expect(result[1].startSec).toBe(5);
+    expect(result[1].endSec).toBe(10);
   });
 
   it('handles missing product data gracefully for overlays', () => {
@@ -251,7 +226,7 @@ describe('planScenes', () => {
     const result = planScenes(buildInput({ assets: emptyAssets }));
 
     // Still produces scenes with correct types/timing
-    expect(result).toHaveLength(6);
+    expect(result).toHaveLength(3);
     for (const scene of result) {
       expect(scene.assetUrl).toBeUndefined();
     }
