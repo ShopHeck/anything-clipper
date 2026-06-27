@@ -124,7 +124,7 @@ describe('chatCompletion', () => {
       type: 'json_schema',
       json_schema: {
         name: 'test_schema',
-        strict: true,
+        strict: false,
         schema: schema.schema,
       },
     });
