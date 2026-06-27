@@ -26,11 +26,11 @@ export const PLANS: Record<PlanId, Plan> = {
     label: 'Free',
     priceUsdMonthly: 0,
     quotas: {
-      uploadsPerMonth: 5,
-      clipGenerationsPerMonth: 10,
-      rendersPerMonth: 15,
-      translationsPerMonth: 5,
-      ugcVideosPerMonth: 3,
+      uploadsPerMonth: -1,
+      clipGenerationsPerMonth: -1,
+      rendersPerMonth: -1,
+      translationsPerMonth: -1,
+      ugcVideosPerMonth: -1,
     },
   },
   pro: {
