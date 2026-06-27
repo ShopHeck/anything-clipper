@@ -8,12 +8,34 @@ const mockSql = vi.hoisted(() => {
   return fn as any;
 });
 
+const mockPuppeteerPage = vi.hoisted(() => ({
+  setUserAgent: vi.fn(async () => {}),
+  goto: vi.fn(async () => {}),
+  waitForSelector: vi.fn(async () => {}),
+  evaluate: vi.fn(async () => ({
+    text: 'Test Product - Great item for only $24.99',
+    imgSrcs: ['https://cdn.example.com/product1.jpg', 'https://cdn.example.com/product2.jpg'],
+  })),
+  close: vi.fn(async () => {}),
+}));
+
+const mockPuppeteerBrowser = vi.hoisted(() => ({
+  newPage: vi.fn(async () => mockPuppeteerPage),
+  close: vi.fn(async () => {}),
+}));
+
 vi.mock('@/app/api/utils/sql', () => ({
   default: mockSql,
 }));
 
 vi.mock('@/app/api/utils/ai', () => ({
   chatCompletionJson: vi.fn(),
+}));
+
+vi.mock('puppeteer', () => ({
+  default: {
+    launch: vi.fn(async () => mockPuppeteerBrowser),
+  },
 }));
 
 vi.mock('@/app/api/utils/storage', () => ({
@@ -62,6 +84,7 @@ import { processProductImages } from '@/lib/assets/product-images';
 import { generateImage } from '@/lib/assets/image-gen';
 import { generatePlaceholderImage } from '@/lib/assets/placeholder-image';
 import { composeUGCVideo } from './compose';
+import puppeteer from 'puppeteer';
 
 const mockProduct: ProductData = {
   name: 'Test Serum',
@@ -149,32 +172,54 @@ describe('orchestrate', () => {
       );
     });
 
-    it('uses direct fetch fallback when proxy not configured but OPENAI_API_KEY is set', async () => {
+    it('uses Puppeteer scraping when proxy not configured but OPENAI_API_KEY is set', async () => {
       delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
       delete process.env.ANYTHING_PROJECT_TOKEN;
       process.env.OPENAI_API_KEY = 'sk-test-key';
-
-      const mockFetch = vi.fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          text: async () => '<html><body><h1>Test Product</h1><p>Great item</p></body></html>',
-        });
-
-      global.fetch = mockFetch;
 
       vi.mocked(chatCompletionJson).mockResolvedValueOnce(mockProduct);
 
       const result = await scrapeProduct('https://tiktok.com/product/456');
       expect(result).toEqual(mockProduct);
-      // Should call fetch with the product URL directly (not a proxy endpoint)
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://tiktok.com/product/456',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'User-Agent': expect.stringContaining('Mozilla'),
-          }),
-        })
+      // Should launch puppeteer instead of using fetch
+      expect(puppeteer.launch).toHaveBeenCalledWith(
+        expect.objectContaining({ headless: true })
       );
+      expect(mockPuppeteerBrowser.newPage).toHaveBeenCalled();
+      expect(mockPuppeteerPage.goto).toHaveBeenCalledWith(
+        'https://tiktok.com/product/456',
+        expect.objectContaining({ waitUntil: 'networkidle2' })
+      );
+      expect(mockPuppeteerPage.evaluate).toHaveBeenCalled();
+      expect(mockPuppeteerBrowser.close).toHaveBeenCalled();
+    });
+
+    it('passes extracted image URLs to chatCompletionJson prompt', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      vi.mocked(chatCompletionJson).mockResolvedValueOnce(mockProduct);
+
+      await scrapeProduct('https://tiktok.com/product/789');
+
+      // Verify the prompt includes the image URLs extracted by puppeteer
+      const chatCall = vi.mocked(chatCompletionJson).mock.calls[0];
+      const userMessage = chatCall[0][1];
+      expect(userMessage.content).toContain('https://cdn.example.com/product1.jpg');
+      expect(userMessage.content).toContain('https://cdn.example.com/product2.jpg');
+      expect(userMessage.content).toContain('Image URLs found on page');
+    });
+
+    it('closes browser even when navigation fails', async () => {
+      delete process.env.NEXT_PUBLIC_CREATE_BASE_URL;
+      delete process.env.ANYTHING_PROJECT_TOKEN;
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      mockPuppeteerPage.goto.mockRejectedValueOnce(new Error('Navigation timeout'));
+
+      await expect(scrapeProduct('https://tiktok.com/product/timeout')).rejects.toThrow('Navigation timeout');
+      expect(mockPuppeteerBrowser.close).toHaveBeenCalled();
     });
 
     it('rejects private/reserved hostnames on direct fetch path (SSRF protection)', async () => {
