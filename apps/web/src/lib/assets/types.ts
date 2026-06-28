@@ -14,6 +14,22 @@ export interface VideoClipAsset {
   section: string;
 }
 
+/** A talking-avatar clip lip-synced to the full voiceover (e.g. HeyGen). */
+export interface AvatarVideoAsset {
+  /** URL of the rendered avatar video. */
+  url: string;
+  /** Duration in seconds when known. */
+  durationSec?: number;
+}
+
+/** An AI-generated product b-roll clip animated from a real product image. */
+export interface BrollClipAsset {
+  /** URL of the generated clip. */
+  url: string;
+  /** The script section this clip is associated with. */
+  section: string;
+}
+
 /** Collection of visual assets available for video composition. */
 export interface ProductAssets {
   /** Product image URLs stored in object storage. */
@@ -24,6 +40,10 @@ export interface ProductAssets {
   backgroundMusic?: string;
   /** Video clips fetched from stock video sources (e.g., Pexels). */
   videoClips?: VideoClipAsset[];
+  /** Talking-avatar clip lip-synced to the voiceover (e.g. HeyGen). */
+  avatarVideo?: AvatarVideoAsset;
+  /** AI-generated product b-roll clips (image-to-video). */
+  brollClips?: BrollClipAsset[];
 }
 
 /** Request to generate/gather assets for a UGC video. */
@@ -71,9 +91,11 @@ export interface AssetGenerationResult {
 export interface ScenePlan {
   startSec: number;
   endSec: number;
-  type: 'product-image' | 'lifestyle' | 'text-overlay' | 'video-clip';
+  type: 'product-image' | 'lifestyle' | 'text-overlay' | 'video-clip' | 'avatar' | 'broll';
   assetUrl?: string;
-  /** URL of the video clip (for type='video-clip'). */
+  /** URL of the video clip (for type='video-clip', 'avatar', or 'broll'). */
   videoUrl?: string;
+  /** Offset (seconds) into the source clip — used for avatar windows. */
+  clipStartSec?: number;
   overlayText?: string;
 }

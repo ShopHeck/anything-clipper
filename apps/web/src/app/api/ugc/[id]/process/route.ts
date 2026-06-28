@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const [owned] = await sql`
-      SELECT id, user_id, product_url, status FROM ugc_projects WHERE id = ${id} AND user_id = ${user.id}
+      SELECT id, user_id, product_url, status, options FROM ugc_projects WHERE id = ${id} AND user_id = ${user.id}
     `;
     if (!owned) return Response.json({ error: 'UGC project not found' }, { status: 404 });
 
@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } else {
     // Worker mode: look up project without user auth
     const [found] = await sql`
-      SELECT id, user_id, product_url, status FROM ugc_projects WHERE id = ${id}
+      SELECT id, user_id, product_url, status, options FROM ugc_projects WHERE id = ${id}
     `;
     if (!found) return Response.json({ error: 'UGC project not found' }, { status: 404 });
     project = found;
@@ -47,16 +47,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  // Parse optional params from request body
-  let voice: TTSVoice | undefined;
-  let templateStyle: string | undefined;
-  let captionTemplate: string | undefined;
+  // Parse optional params from request body, falling back to the options
+  // persisted at create time (so worker-driven processing uses the same
+  // settings the user picked).
+  const stored =
+    typeof project.options === 'string'
+      ? (JSON.parse(project.options) as Record<string, unknown>)
+      : ((project.options as Record<string, unknown> | null) ?? {});
+
+  let voice: TTSVoice | undefined = stored.voice as TTSVoice | undefined;
+  let templateStyle: string | undefined = stored.templateStyle as string | undefined;
+  let captionTemplate: string | undefined = stored.captionTemplate as string | undefined;
+  let avatarId: string | undefined = stored.avatarId as string | undefined;
+  let useAvatar: boolean | undefined = stored.useAvatar as boolean | undefined;
+  let useBroll: boolean | undefined = stored.useBroll as boolean | undefined;
 
   try {
     const body = await request.json();
-    voice = body?.voice;
-    templateStyle = body?.templateStyle;
-    captionTemplate = body?.captionTemplate;
+    if (body?.voice !== undefined) voice = body.voice;
+    if (body?.templateStyle !== undefined) templateStyle = body.templateStyle;
+    if (body?.captionTemplate !== undefined) captionTemplate = body.captionTemplate;
+    if (body?.avatarId !== undefined) avatarId = body.avatarId;
+    if (body?.useAvatar !== undefined) useAvatar = body.useAvatar;
+    if (body?.useBroll !== undefined) useBroll = body.useBroll;
   } catch {
     // Empty body is fine
   }
@@ -68,6 +81,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     voice,
     templateStyle,
     captionTemplate,
+    avatarId,
+    useAvatar,
+    useBroll,
   });
 
   if (result.status === 'failed') {

@@ -20,6 +20,7 @@ import {
   Image as ImageIcon,
   Layers,
   Film,
+  Smile,
 } from 'lucide-react';
 import { useSession } from '@/lib/auth-client';
 
@@ -27,6 +28,8 @@ type UGCStatus =
   | 'scraping'
   | 'generating_script'
   | 'generating_tts'
+  | 'generating_avatar'
+  | 'generating_broll'
   | 'generating_assets'
   | 'planning_scenes'
   | 'composing'
@@ -48,6 +51,7 @@ interface UGCJob {
   ttsAudioUrl: string | null;
   videoAssets: Record<string, unknown> | null;
   videoUrl: string | null;
+  avatarVideoUrl: string | null;
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -76,6 +80,8 @@ const PIPELINE_STAGES: { key: UGCStatus; label: string; icon: typeof Play }[] = 
   { key: 'scraping', label: 'Scraping product data', icon: FileText },
   { key: 'generating_script', label: 'Generating script', icon: Sparkles },
   { key: 'generating_tts', label: 'Creating voiceover', icon: Mic },
+  { key: 'generating_avatar', label: 'Generating avatar', icon: Smile },
+  { key: 'generating_broll', label: 'Filming product b-roll', icon: Video },
   { key: 'generating_assets', label: 'Generating visuals', icon: ImageIcon },
   { key: 'planning_scenes', label: 'Planning scenes', icon: Layers },
   { key: 'composing', label: 'Composing video', icon: Film },
@@ -97,6 +103,7 @@ export default function UGCPage() {
   const [url, setUrl] = useState('');
   const [voice, setVoice] = useState<Voice>('nova');
   const [templateStyle, setTemplateStyle] = useState<TemplateStyle>('authentic');
+  const [avatarId, setAvatarId] = useState<string>('');
   const [jobId, setJobId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -110,6 +117,25 @@ export default function UGCPage() {
       router.push('/account/signin');
     }
   }, [session, sessionPending, router]);
+
+  // Fetch available talking-avatar options (HeyGen). When the provider isn't
+  // configured the response has configured=false and we hide the picker.
+  const { data: avatarData } = useQuery<{
+    configured: boolean;
+    avatars: { avatarId: string; name: string; previewImageUrl?: string }[];
+  }>({
+    queryKey: ['ugc-avatars'],
+    queryFn: async () => {
+      const res = await fetch('/api/ugc/avatars', { credentials: 'include' });
+      if (!res.ok) return { configured: false, avatars: [] };
+      return res.json();
+    },
+    enabled: !!session?.user,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const avatars = avatarData?.avatars ?? [];
+  const avatarsAvailable = Boolean(avatarData?.configured) && avatars.length > 0;
 
   // Poll the UGC job status
   const {
@@ -185,7 +211,7 @@ export default function UGCPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ url, voice, templateStyle }),
+        body: JSON.stringify({ url, voice, templateStyle, avatarId: avatarId || undefined }),
       });
 
       if (!createRes.ok) {
@@ -204,7 +230,7 @@ export default function UGCPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ voice, templateStyle }),
+        body: JSON.stringify({ voice, templateStyle, avatarId: avatarId || undefined }),
       });
 
       if (!processRes.ok) {
@@ -225,7 +251,7 @@ export default function UGCPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [url, voice, templateStyle]);
+  }, [url, voice, templateStyle, avatarId]);
 
   const handleRetry = useCallback(() => {
     setJobId(null);
@@ -279,8 +305,8 @@ export default function UGCPage() {
         <div className="text-center mb-10">
           <h1 className="text-3xl md:text-4xl font-black mb-3">Create UGC Video</h1>
           <p className="text-white/45 text-lg leading-relaxed max-w-lg mx-auto">
-            Paste a product URL and our AI will generate a complete UGC-style video with script,
-            voiceover, and visuals.
+            Paste a TikTok Shop product URL and our AI generates a realistic UGC video — a
+            smiling creator avatar, matching voiceover, and your real product shown in use.
           </p>
         </div>
 
@@ -333,6 +359,60 @@ export default function UGCPage() {
                 </select>
               </div>
             </div>
+
+            {/* Avatar picker — only shown when HeyGen is configured */}
+            {avatarsAvailable && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-white/55 mb-2 flex items-center gap-1.5">
+                  <Smile size={14} className="text-violet-400" /> Creator Avatar
+                </label>
+                <p className="text-xs text-white/30 mb-3">
+                  A smiling AI creator presents your product and reads the voiceover.
+                </p>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                  {/* Auto option */}
+                  <button
+                    type="button"
+                    onClick={() => setAvatarId('')}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-3 text-center transition-all ${
+                      avatarId === ''
+                        ? 'border-violet-500/60 bg-violet-500/10'
+                        : 'border-white/8 bg-white/4 hover:border-white/20'
+                    }`}
+                  >
+                    <Sparkles size={18} className="text-violet-400" />
+                    <span className="text-[11px] font-medium text-white/70">Auto</span>
+                  </button>
+                  {avatars.slice(0, 11).map((a) => (
+                    <button
+                      key={a.avatarId}
+                      type="button"
+                      onClick={() => setAvatarId(a.avatarId)}
+                      title={a.name}
+                      className={`flex flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border p-1 text-center transition-all ${
+                        avatarId === a.avatarId
+                          ? 'border-violet-500/60 bg-violet-500/10'
+                          : 'border-white/8 bg-white/4 hover:border-white/20'
+                      }`}
+                    >
+                      {a.previewImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={a.previewImageUrl}
+                          alt={a.name}
+                          className="h-14 w-full rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-full items-center justify-center rounded-lg bg-white/5">
+                          <Smile size={18} className="text-white/40" />
+                        </div>
+                      )}
+                      <span className="w-full truncate text-[10px] text-white/60">{a.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Generate button */}
             <button
@@ -572,9 +652,9 @@ export default function UGCPage() {
         {!jobId && (
           <div className="mt-8 grid grid-cols-3 gap-4">
             {[
-              { icon: FileText, label: 'AI Script', desc: 'GPT-powered copywriting' },
-              { icon: Mic, label: 'TTS Voice', desc: 'Natural OpenAI voices' },
-              { icon: Film, label: 'Video Compose', desc: 'Auto scene assembly' },
+              { icon: Smile, label: 'AI Avatar', desc: 'Realistic talking creator' },
+              { icon: Mic, label: 'TTS Voice', desc: 'Natural matching voiceover' },
+              { icon: Film, label: 'Product B-roll', desc: 'Your real product in use' },
             ].map((f, i) => {
               const Icon = f.icon;
               return (

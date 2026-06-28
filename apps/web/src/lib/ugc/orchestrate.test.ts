@@ -82,6 +82,7 @@ import {
   gatherAssets,
   buildScenePlan,
   buildRenderSpec,
+  ensureCtaEnding,
 } from './orchestrate';
 import { chatCompletionJson } from '@/app/api/utils/ai';
 import { scriptToAudio } from '@/lib/tts/script-to-audio';
@@ -139,6 +140,29 @@ const mockTTSResult = {
 describe('orchestrate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('ensureCtaEnding', () => {
+    it('appends the required TikTok Shop line when missing', () => {
+      expect(ensureCtaEnding('Grab yours now, 50% off today')).toBe(
+        'Grab yours now, 50% off today. Purchase from my TikTok Shop.'
+      );
+    });
+
+    it('leaves an already-correct CTA unchanged', () => {
+      const cta = 'Hurry, this sells out fast. Purchase from my TikTok Shop.';
+      expect(ensureCtaEnding(cta)).toBe(cta);
+    });
+
+    it('is case-insensitive and adds the trailing period if absent', () => {
+      expect(ensureCtaEnding('Get it. purchase from my tiktok shop')).toBe(
+        'Get it. purchase from my tiktok shop.'
+      );
+    });
+
+    it('handles an empty CTA', () => {
+      expect(ensureCtaEnding('')).toBe('Purchase from my TikTok Shop.');
+    });
   });
 
   describe('scrapeProduct', () => {

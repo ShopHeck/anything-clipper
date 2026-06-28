@@ -304,4 +304,68 @@ describe('planScenes', () => {
       expect(result[1].startSec).toBe(4.3);
     });
   });
+
+  describe('avatar pipeline', () => {
+    const avatarAssets: ProductAssets = {
+      productImages: [],
+      lifestyleImages: [],
+      avatarVideo: { url: 'https://cdn/avatar.mp4', durationSec: 30 },
+      brollClips: [
+        { url: 'https://cdn/solution.mp4', section: 'solution' },
+        { url: 'https://cdn/demo.mp4', section: 'demo' },
+      ],
+    };
+
+    it('routes hook/problem/cta to the avatar and solution/demo to b-roll', () => {
+      const result = planScenes(buildInput({ assets: avatarAssets }));
+      expect(result).toHaveLength(5);
+      expect(result[0].type).toBe('avatar'); // hook
+      expect(result[1].type).toBe('avatar'); // problem
+      expect(result[2].type).toBe('broll'); // solution
+      expect(result[3].type).toBe('broll'); // demo
+      expect(result[4].type).toBe('avatar'); // cta
+    });
+
+    it('plays the matching window of the avatar clip via clipStartSec', () => {
+      const result = planScenes(buildInput({ assets: avatarAssets }));
+      // hook avatar window starts at the hook start (0)
+      expect(result[0].clipStartSec).toBe(0);
+      expect(result[0].videoUrl).toBe('https://cdn/avatar.mp4');
+      // cta avatar window starts at the cta timing start (20.3)
+      expect(result[4].clipStartSec).toBe(20.3);
+    });
+
+    it('maps b-roll clips to their section and starts them at 0', () => {
+      const result = planScenes(buildInput({ assets: avatarAssets }));
+      expect(result[2].videoUrl).toBe('https://cdn/solution.mp4');
+      expect(result[2].clipStartSec).toBe(0);
+      expect(result[3].videoUrl).toBe('https://cdn/demo.mp4');
+    });
+
+    it('falls back to the avatar when a b-roll section has no clip', () => {
+      const partial: ProductAssets = {
+        productImages: [],
+        lifestyleImages: [],
+        avatarVideo: { url: 'https://cdn/avatar.mp4', durationSec: 30 },
+        brollClips: [{ url: 'https://cdn/solution.mp4', section: 'solution' }],
+      };
+      const result = planScenes(buildInput({ assets: partial }));
+      // demo has no b-roll -> avatar window
+      expect(result[3].type).toBe('avatar');
+      expect(result[3].videoUrl).toBe('https://cdn/avatar.mp4');
+    });
+
+    it('clamps the avatar window so it never seeks past the clip duration', () => {
+      const shortAvatar: ProductAssets = {
+        productImages: [],
+        lifestyleImages: [],
+        avatarVideo: { url: 'https://cdn/avatar.mp4', durationSec: 22 },
+        brollClips: [],
+      };
+      const result = planScenes(buildInput({ assets: shortAvatar }));
+      const cta = result[4];
+      const ctaDur = cta.endSec - cta.startSec;
+      expect((cta.clipStartSec ?? 0) + ctaDur).toBeLessThanOrEqual(22);
+    });
+  });
 });

@@ -28,6 +28,14 @@ export interface UGCScene {
   isVideoClip?: boolean;
   /** URL to the video clip file (when isVideoClip is true). */
   videoUrl?: string;
+  /**
+   * Offset (seconds) into the source video clip to start from. Used for the
+   * talking-avatar clip, which is rendered full-length and lip-synced to the
+   * whole voiceover: each avatar scene plays the matching window of that clip
+   * (source time === timeline time). Defaults to 0 for stock/b-roll clips,
+   * which instead loop to fill their scene window.
+   */
+  clipStartSec?: number;
 }
 
 /** Full render specification for a UGC video composition. */

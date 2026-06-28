@@ -16,6 +16,19 @@ const SECTION_ASSET_MAP: Record<string, ScenePlan['type']> = {
   keyPoints: 'lifestyle',
 };
 
+/**
+ * Section -> role mapping for the avatar pipeline. The smiling talking
+ * "creator" carries the hook, the relatable problem, and the CTA; the real
+ * product is showcased via AI b-roll during the solution and demo.
+ */
+const AVATAR_SECTION_ROLE: Record<string, 'avatar' | 'broll'> = {
+  hook: 'avatar',
+  problem: 'avatar',
+  solution: 'broll',
+  demo: 'broll',
+  cta: 'avatar',
+};
+
 export interface ScenePlannerInput {
   /** TTS timing markers per script section. */
   timings: Array<{
@@ -97,6 +110,12 @@ export function planScenes(input: ScenePlannerInput): ScenePlan[] {
 
   if (timings.length === 0) return [];
 
+  // Avatar pipeline: a talking-avatar clip is available -> intercut the
+  // smiling creator (hook/problem/cta) with product b-roll (solution/demo).
+  if (assets.avatarVideo) {
+    return planAvatarScenes(timings, assets);
+  }
+
   // If video clips are available, use the video-clip pipeline
   if (assets.videoClips && assets.videoClips.length > 0) {
     return planVideoClipScenes(timings, assets, productData, script);
@@ -104,6 +123,70 @@ export function planScenes(input: ScenePlannerInput): ScenePlan[] {
 
   // Fallback to image-based scene planning
   return planImageScenes(timings, assets, productData, script);
+}
+
+/**
+ * Plan scenes for the avatar pipeline.
+ *
+ * The avatar clip is rendered full-length and lip-synced to the entire
+ * voiceover, so an avatar scene simply plays the matching time window of that
+ * clip (source time === timeline time, captured via clipStartSec). Product
+ * b-roll clips are mapped to their section and start at 0 (they loop to fill).
+ * Sections that lack a b-roll clip gracefully fall back to the avatar so the
+ * timeline always has the creator on screen rather than a gap.
+ */
+function planAvatarScenes(
+  timings: ScenePlannerInput['timings'],
+  assets: ProductAssets
+): ScenePlan[] {
+  const scenes: ScenePlan[] = [];
+  const avatarUrl = assets.avatarVideo!.url;
+  const avatarDuration = assets.avatarVideo!.durationSec;
+
+  const brollBySection = new Map<string, string>();
+  for (const clip of assets.brollClips ?? []) {
+    if (!brollBySection.has(clip.section)) brollBySection.set(clip.section, clip.url);
+  }
+
+  for (let i = 0; i < timings.length; i++) {
+    const timing = timings[i];
+    const prevScene = scenes[scenes.length - 1];
+
+    // Fill gap between previous scene end and this section start.
+    if (prevScene && timing.startSec > prevScene.endSec) {
+      prevScene.endSec = timing.startSec;
+    }
+
+    const role = AVATAR_SECTION_ROLE[timing.section] ?? 'avatar';
+    const brollUrl = role === 'broll' ? brollBySection.get(timing.section) : undefined;
+
+    if (role === 'broll' && brollUrl) {
+      scenes.push({
+        startSec: timing.startSec,
+        endSec: timing.endSec,
+        type: 'broll',
+        videoUrl: brollUrl,
+        clipStartSec: 0,
+      });
+    } else {
+      // Avatar window. Clamp the source offset so we never seek past the end
+      // of the rendered avatar clip when its duration is known.
+      const sceneDur = timing.endSec - timing.startSec;
+      let clipStartSec = timing.startSec;
+      if (typeof avatarDuration === 'number' && clipStartSec + sceneDur > avatarDuration) {
+        clipStartSec = Math.max(0, avatarDuration - sceneDur);
+      }
+      scenes.push({
+        startSec: timing.startSec,
+        endSec: timing.endSec,
+        type: 'avatar',
+        videoUrl: avatarUrl,
+        clipStartSec,
+      });
+    }
+  }
+
+  return scenes;
 }
 
 /**

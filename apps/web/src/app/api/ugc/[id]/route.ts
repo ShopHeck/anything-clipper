@@ -14,7 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const [project] = await sql`
     SELECT id, user_id, product_url, product_data, script, tts_audio_url,
-           tts_timing, video_assets, video_url, status, created_at, updated_at
+           tts_timing, video_assets, video_url, avatar_video_url, broll_assets,
+           status, created_at, updated_at
     FROM ugc_projects
     WHERE id = ${id} AND user_id = ${user.id}
   `;
@@ -38,6 +39,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     typeof project.video_assets === 'string'
       ? JSON.parse(project.video_assets)
       : project.video_assets;
+  const brollAssets =
+    typeof project.broll_assets === 'string'
+      ? JSON.parse(project.broll_assets)
+      : project.broll_assets;
 
   // Presign the TTS audio URL on read if it looks like a storage key
   let ttsAudioUrl: string | null = project.tts_audio_url ?? null;
@@ -65,6 +70,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ttsTiming: ttsTiming ?? null,
     videoAssets: project.status === 'failed' ? null : (videoAssets ?? null),
     videoUrl: project.video_url ?? null,
+    avatarVideoUrl: project.avatar_video_url ?? null,
+    brollAssets: project.status === 'failed' ? null : (brollAssets ?? null),
     ...(errorMessage ? { error: errorMessage } : {}),
     createdAt: project.created_at,
     updatedAt: project.updated_at,
