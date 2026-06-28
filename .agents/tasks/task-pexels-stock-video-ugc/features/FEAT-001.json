@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Replace the still-image UGC pipeline with a stock-video-based pipeline. This involves: (1) expanding the UGC script format to 5 sections (hook/problem/solution/demo/cta) with per-section Pexels search queries, (2) creating a Pexels Video API client module, (3) rewriting the scene planner and asset gathering to fetch video clips instead of images, (4) updating ffmpeg-compose to handle video inputs (trim+scale+crop+concat) instead of still images with zoompan, (5) updating compose.ts to download video files, (6) removing the 15-sec hard cap from TTS so scripts run their natural 20-35 sec duration, and (7) updating all related tests.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1 - Update TTS types and script structure: In apps/web/src/lib/tts/types.ts, change UGCScript from {hook, keyPoints, cta} to {hook, problem, solution, demo, cta} where each field is the voiceover text for that section. Add a new interface UGCScriptWithQueries that extends UGCScript with a field 'searchQueries: Record<string, string>' mapping section names to Pexels search query strings.",
     "Step 2 - Remove 15-sec hard cap from TTS: In apps/web/src/lib/tts/script-to-audio.ts, remove the MAX_DURATION_SEC=15 constant and the proportional compression logic. Update SCRIPT_SECTIONS to include the new 5 sections ['hook', 'problem', 'solution', 'demo', 'cta']. The total duration should be whatever the script naturally produces (typically 20-35 sec). Keep the estimateDuration, calculateTimings, buildFullText, and scriptToAudio functions but remove the capping logic.",
@@ -40,5 +40,5 @@
     "Run 'yarn workspace web test' and confirm all UGC/TTS/assets tests pass (pre-existing billing test failures are known and acceptable)"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All implementation completed and verified. Typecheck passes with zero errors. All new/modified tests pass (187 passing). Only pre-existing billing/plans.test.ts failures (2) remain which are documented as acceptable. The pexels-video downloadVideo test uses real fs writes to a temp dir (vitest cannot mock node: builtins effectively in this project). The ffmpeg-compose parameter was renamed from sceneImagePaths to sceneAssetPaths to reflect dual image/video support."
 }
