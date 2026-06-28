@@ -266,7 +266,7 @@ describe('buildUGCFfmpegArgs', () => {
   });
 
   describe('video clip scenes', () => {
-    it('uses -ss 0 -t instead of -loop 1 for video clips', () => {
+    it('loops video clips to fill the scene window (no -ss when clipStartSec is unset)', () => {
       const videoSpec: UGCRenderSpec = {
         ...baseSpec,
         scenes: [
@@ -282,9 +282,32 @@ describe('buildUGCFfmpegArgs', () => {
         totalDurationSec: 10,
       });
       const joined = args.join(' ');
-      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip1.mp4');
-      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip2.mp4');
-      expect(joined).not.toContain('-loop');
+      expect(joined).toContain('-stream_loop -1 -t 5 -i /tmp/clip1.mp4');
+      expect(joined).toContain('-stream_loop -1 -t 5 -i /tmp/clip2.mp4');
+      expect(joined).not.toContain('-loop 1');
+      expect(joined).not.toContain('-ss');
+    });
+
+    it('input-seeks to the avatar window when clipStartSec is set', () => {
+      const avatarSpec: UGCRenderSpec = {
+        ...baseSpec,
+        scenes: [
+          { startSec: 0, endSec: 4, imageUrl: '', isVideoClip: true, videoUrl: 'a.mp4', clipStartSec: 0 },
+          { startSec: 20, endSec: 25, imageUrl: '', isVideoClip: true, videoUrl: 'a.mp4', clipStartSec: 20 },
+        ],
+      };
+      const args = buildUGCFfmpegArgs({
+        spec: avatarSpec,
+        ttsAudioPath: '/tmp/voice.mp3',
+        sceneAssetPaths: ['/tmp/avatar.mp4', '/tmp/avatar.mp4'],
+        outPath: '/tmp/output.mp4',
+        totalDurationSec: 25,
+      });
+      const joined = args.join(' ');
+      // Avatar windows seek into the full-length clip; they do not loop.
+      expect(joined).toContain('-ss 0 -t 4 -i /tmp/avatar.mp4');
+      expect(joined).toContain('-ss 20 -t 5 -i /tmp/avatar.mp4');
+      expect(joined).not.toContain('-stream_loop');
     });
 
     it('does not apply zoompan filter to video clips', () => {
@@ -344,12 +367,12 @@ describe('buildUGCFfmpegArgs', () => {
       const joined = args.join(' ');
       const graph = args[args.indexOf('-filter_complex') + 1];
 
-      // First scene: video (no -loop)
-      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip.mp4');
-      // Second scene: image (has -loop)
+      // First scene: video clip (loops to fill, no -loop 1)
+      expect(joined).toContain('-stream_loop -1 -t 5 -i /tmp/clip.mp4');
+      // Second scene: image (has -loop 1)
       expect(joined).toContain('-loop 1 -t 5 -i /tmp/img.jpg');
-      // Third scene: video (no -loop)
-      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip2.mp4');
+      // Third scene: video clip (loops to fill)
+      expect(joined).toContain('-stream_loop -1 -t 5 -i /tmp/clip2.mp4');
 
       // First and third scene should NOT have zoompan
       // Second scene SHOULD have zoompan

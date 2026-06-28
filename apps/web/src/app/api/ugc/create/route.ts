@@ -28,9 +28,12 @@ export async function POST(request: Request) {
       voice?: TTSVoice;
       templateStyle?: string;
       captionTemplate?: string;
+      avatarId?: string;
+      useAvatar?: boolean;
+      useBroll?: boolean;
     };
 
-    const { url, voice, templateStyle, captionTemplate } = body;
+    const { url, voice, templateStyle, captionTemplate, avatarId, useAvatar, useBroll } = body;
 
     if (!url || typeof url !== 'string') {
       return Response.json({ error: 'url is required' }, { status: 400 });
@@ -66,17 +69,18 @@ export async function POST(request: Request) {
     }
 
     // Create ugc_projects row
-    const meta = JSON.stringify({ voice, templateStyle, captionTemplate });
+    const options = { voice, templateStyle, captionTemplate, avatarId, useAvatar, useBroll };
+    const optionsJson = JSON.stringify(options);
     const [project] = await sql`
-      INSERT INTO ugc_projects (user_id, product_url, status)
-      VALUES (${user.id}, ${url}, 'scraping')
+      INSERT INTO ugc_projects (user_id, product_url, status, options)
+      VALUES (${user.id}, ${url}, 'scraping', ${optionsJson})
       RETURNING id, status, created_at
     `;
 
     return Response.json({
       jobId: project.id,
       status: 'processing',
-      meta: { voice, templateStyle, captionTemplate },
+      meta: options,
     });
   } catch (err) {
     console.error('Create UGC project error:', err);

@@ -131,8 +131,15 @@ export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
     const duration = scene.endSec - scene.startSec;
 
     if (scene.isVideoClip) {
-      // Video clip input: trim to the scene duration
-      args.push('-ss', '0', '-t', String(duration), '-i', sceneAssetPaths[i]);
+      if (scene.clipStartSec !== undefined) {
+        // Avatar clip: play the matching window of the full-length, voiceover-
+        // synced avatar video. Input-seek to the window start, cap at duration.
+        args.push('-ss', String(scene.clipStartSec), '-t', String(duration), '-i', sceneAssetPaths[i]);
+      } else {
+        // Stock/b-roll clip: loop so a short source still fills the whole scene
+        // window; -t caps it at the scene duration.
+        args.push('-stream_loop', '-1', '-t', String(duration), '-i', sceneAssetPaths[i]);
+      }
     } else {
       // Still image input: loop for its scene duration
       args.push('-loop', '1', '-t', String(duration), '-i', sceneAssetPaths[i]);

@@ -5,12 +5,14 @@
 import { chatCompletionJson } from '@/app/api/utils/ai';
 import sql from '@/app/api/utils/sql';
 import { presignDownload } from '@/app/api/utils/storage';
+import { brollConfigured, generateProductBroll } from '@/lib/assets/broll';
+import { generateAvatarVideo, heygenConfigured } from '@/lib/assets/heygen';
 import { generateImage } from '@/lib/assets/image-gen';
 import { searchVideos, pickBestFile } from '@/lib/assets/pexels-video';
 import { generatePlaceholderImage } from '@/lib/assets/placeholder-image';
 import { processProductImages } from '@/lib/assets/product-images';
 import { planScenes } from '@/lib/assets/scene-planner';
-import type { ProductAssets, ScenePlan, VideoClipAsset } from '@/lib/assets/types';
+import type { BrollClipAsset, ProductAssets, ScenePlan, VideoClipAsset } from '@/lib/assets/types';
 import { scriptToAudio } from '@/lib/tts/script-to-audio';
 import type { ScriptToAudioResult, SectionTiming, TTSVoice, UGCScript, UGCScriptWithQueries } from '@/lib/tts/types';
 import puppeteer from 'puppeteer';
@@ -39,6 +41,8 @@ export type UGCProjectStatus =
   | 'scraping'
   | 'generating_script'
   | 'generating_tts'
+  | 'generating_avatar'
+  | 'generating_broll'
   | 'generating_assets'
   | 'planning_scenes'
   | 'composing'
@@ -52,6 +56,12 @@ export interface OrchestrateOptions {
   voice?: TTSVoice;
   templateStyle?: string;
   captionTemplate?: string;
+  /** HeyGen avatar id to drive the talking creator. */
+  avatarId?: string;
+  /** Opt out of the avatar pipeline even when HeyGen is configured. */
+  useAvatar?: boolean;
+  /** Opt out of AI product b-roll even when fal is configured. */
+  useBroll?: boolean;
 }
 
 export interface OrchestrateResult {
@@ -279,7 +289,7 @@ Write 5 sections:
 - problem (3-5 sec): Relatable problem the viewer faces
 - solution (5-8 sec): How this product solves it, key benefits
 - demo (5-8 sec): Describe what using the product looks/feels like
-- cta (3-5 sec): Urgent call to action, mention the deal
+- cta (3-5 sec): Urgent call to action. It MUST end with the exact sentence: "Purchase from my TikTok Shop." (verbatim, as the final words)
 
 Also provide a searchQueries object with a Pexels stock video search query for each section. These should describe real video footage that would match the section content (e.g., for a skincare demo: "woman applying face cream close up", for a hook about skin problems: "woman looking in mirror concerned").
 
@@ -287,6 +297,7 @@ Rules:
 - Sound like a real person, NOT an ad
 - Be specific about the product benefits
 - Total script should be 20-35 seconds when spoken naturally
+- The cta section must conclude with the exact words "Purchase from my TikTok Shop."
 - Search queries should be specific, visual descriptions for stock video`,
       },
     ],
@@ -320,6 +331,26 @@ Rules:
   );
 
   return script;
+}
+
+/** The exact closing line every UGC video must end on. */
+export const REQUIRED_CTA_ENDING = 'Purchase from my TikTok Shop.';
+
+/**
+ * Guarantee the CTA ends with the required TikTok Shop line, even if the model
+ * phrased it differently. Idempotent and case-insensitive on the check.
+ */
+export function ensureCtaEnding(cta: string): string {
+  const trimmed = (cta ?? '').trim();
+  const normalized = trimmed.toLowerCase().replace(/\s+/g, ' ');
+  if (normalized.endsWith('purchase from my tiktok shop.')) {
+    return trimmed;
+  }
+  if (normalized.endsWith('purchase from my tiktok shop')) {
+    return `${trimmed}.`;
+  }
+  const base = trimmed.replace(/[.!?\s]+$/, '');
+  return base.length > 0 ? `${base}. ${REQUIRED_CTA_ENDING}` : REQUIRED_CTA_ENDING;
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +463,98 @@ export async function gatherAssets(
 }
 
 // ---------------------------------------------------------------------------
+// Step 4b: Avatar + AI product b-roll assets (moras-style pipeline)
+// ---------------------------------------------------------------------------
+
+/** Sections that are showcased with AI product b-roll (vs. the talking avatar). */
+const BROLL_SECTIONS = ['solution', 'demo'] as const;
+
+/**
+ * Download/store the scraped product images and return their public URLs.
+ * These feed both the avatar pipeline's b-roll and the image fallback.
+ */
+export async function gatherProductImages(
+  product: ProductData,
+  userId: string
+): Promise<string[]> {
+  if (!product.imageUrls || product.imageUrls.length === 0) return [];
+  try {
+    const processed = await processProductImages(product.imageUrls, userId);
+    return processed.map((p) => p.storageUrl);
+  } catch (err) {
+    console.warn('[UGC] product image processing failed:', err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+/**
+ * Generate the talking-avatar clip lip-synced to the full voiceover.
+ * Returns null (and logs) on any failure so the pipeline can fall back.
+ */
+export async function generateAvatarAsset(
+  ttsAudioUrl: string,
+  avatarId?: string
+): Promise<ProductAssets['avatarVideo'] | null> {
+  try {
+    const result = await generateAvatarVideo({ audioUrl: ttsAudioUrl, avatarId });
+    return { url: result.videoUrl, durationSec: result.durationSec };
+  } catch (err) {
+    console.warn('[UGC] avatar generation failed:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/** Build a photoreal motion prompt for a b-roll section. */
+function brollPrompt(section: string, product: ProductData): string {
+  const name = product.name;
+  const features = product.features ?? [];
+  const detail = features.length > 0 ? `, highlighting ${features.slice(0, 2).join(' and ')}` : '';
+  if (section === 'demo') {
+    return `A real person using ${name} in an authentic home setting${detail}. Natural handheld UGC style, smooth subtle motion, photorealistic, soft natural lighting, vertical 9:16.`;
+  }
+  return `Close-up product shot of ${name} held and shown in a person's hands${detail}. Realistic UGC style, gentle camera movement, soft natural lighting, vertical 9:16.`;
+}
+
+/**
+ * Generate AI product b-roll clips (image-to-video) from the real product
+ * images for the showcase sections. Best-effort: any clip that fails is
+ * skipped and the avatar covers that section instead.
+ */
+export async function generateBrollClips(
+  productImages: string[],
+  product: ProductData,
+  timings: SectionTiming[]
+): Promise<BrollClipAsset[]> {
+  if (productImages.length === 0) return [];
+
+  const clips: BrollClipAsset[] = [];
+  let imgIdx = 0;
+
+  for (const section of BROLL_SECTIONS) {
+    const imageUrl = productImages[imgIdx % productImages.length];
+    imgIdx++;
+    const timing = timings.find((t) => t.section === section);
+    const durationSec = timing ? timing.endSec - timing.startSec : 5;
+
+    try {
+      const { videoUrl } = await generateProductBroll({
+        imageUrl,
+        prompt: brollPrompt(section, product),
+        durationSec,
+      });
+      clips.push({ url: videoUrl, section });
+    } catch (err) {
+      console.warn(
+        `[UGC] b-roll generation failed for "${section}":`,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+
+  return clips;
+}
+
+// ---------------------------------------------------------------------------
 // Step 5: Plan scenes
 // ---------------------------------------------------------------------------
 
@@ -469,7 +592,19 @@ export function buildRenderSpec(
 ): UGCRenderSpec {
   // Convert scene plan into UGCScene array
   const scenes: UGCScene[] = scenePlan.map((scene, i) => {
-    if (scene.type === 'video-clip' && scene.videoUrl) {
+    // Avatar window: play the matching segment of the voiceover-synced clip.
+    if (scene.type === 'avatar' && scene.videoUrl) {
+      return {
+        startSec: scene.startSec,
+        endSec: scene.endSec,
+        imageUrl: '',
+        isVideoClip: true,
+        videoUrl: scene.videoUrl,
+        clipStartSec: scene.clipStartSec ?? 0,
+      };
+    }
+    // AI product b-roll or stock clip: loop to fill (no clipStartSec).
+    if ((scene.type === 'broll' || scene.type === 'video-clip') && scene.videoUrl) {
       return {
         startSec: scene.startSec,
         endSec: scene.endSec,
@@ -507,7 +642,7 @@ export function buildRenderSpec(
 // ---------------------------------------------------------------------------
 
 export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<OrchestrateResult> {
-  const { projectId, userId, url, voice, templateStyle, captionTemplate } = opts;
+  const { projectId, userId, url, voice, templateStyle, captionTemplate, avatarId } = opts;
 
   try {
     // Step 1: Scrape product
@@ -522,7 +657,8 @@ export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<Orc
       problem: scriptWithQueries.problem,
       solution: scriptWithQueries.solution,
       demo: scriptWithQueries.demo,
-      cta: scriptWithQueries.cta,
+      // Guarantee the video ends on the required TikTok Shop CTA.
+      cta: ensureCtaEnding(scriptWithQueries.cta),
     };
     await updateProjectStatus(projectId, 'generating_tts', { script });
 
@@ -535,8 +671,40 @@ export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<Orc
       tts_timing: ttsResult,
     });
 
-    // Step 4: Gather visual assets (video clips from Pexels or image fallback)
-    const assets = await gatherAssets(product, userId, scriptWithQueries);
+    // Step 4: Gather visual assets.
+    // Preferred path (moras-style): a smiling talking avatar lip-synced to the
+    // voiceover, intercut with AI product b-roll of the real product. Falls
+    // back to the stock-footage / image pipeline when avatars aren't available
+    // or generation fails.
+    let assets: ProductAssets;
+    const useAvatarPipeline = opts.useAvatar !== false && heygenConfigured();
+
+    if (useAvatarPipeline) {
+      await updateProjectStatus(projectId, 'generating_avatar');
+      const avatarVideo = await generateAvatarAsset(ttsResult.audioUrl, avatarId);
+
+      if (avatarVideo) {
+        await sql`UPDATE ugc_projects SET avatar_video_url = ${avatarVideo.url}, updated_at = NOW() WHERE id = ${projectId}`;
+
+        const productImages = await gatherProductImages(product, userId);
+        let brollClips: BrollClipAsset[] = [];
+        if (opts.useBroll !== false && brollConfigured()) {
+          await updateProjectStatus(projectId, 'generating_broll');
+          brollClips = await generateBrollClips(productImages, product, ttsResult.timings);
+          if (brollClips.length > 0) {
+            const brollJson = JSON.stringify(brollClips);
+            await sql`UPDATE ugc_projects SET broll_assets = ${brollJson}, updated_at = NOW() WHERE id = ${projectId}`;
+          }
+        }
+
+        assets = { productImages, lifestyleImages: [], avatarVideo, brollClips };
+      } else {
+        // Avatar generation failed — degrade to the stock/image pipeline.
+        assets = await gatherAssets(product, userId, scriptWithQueries);
+      }
+    } else {
+      assets = await gatherAssets(product, userId, scriptWithQueries);
+    }
 
     await updateProjectStatus(projectId, 'planning_scenes', {
       video_assets: assets,
