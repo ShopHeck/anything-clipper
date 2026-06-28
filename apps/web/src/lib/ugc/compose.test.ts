@@ -131,4 +131,40 @@ describe('composeUGCVideo', () => {
     warnSpy.mockRestore();
     vi.unstubAllGlobals();
   });
+
+  it('downloads video clips for scenes with isVideoClip=true', async () => {
+    mockSpawn.mockImplementation(() => createMockProcess('success'));
+
+    const mockFetch = vi.fn().mockImplementation((url: string | URL) => {
+      return Promise.resolve({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(100)),
+      });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const spec: UGCRenderSpec = {
+      ttsAudioUrl: 'https://example.com/voiceover.mp3',
+      scenes: [
+        { startSec: 0, endSec: 5, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip1.mp4' },
+        { startSec: 5, endSec: 10, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip2.mp4' },
+      ],
+      captions: [],
+      aspect: '9:16',
+      captionTemplateId: 'default',
+    };
+
+    const result = await composeUGCVideo({
+      spec,
+      outputKey: 'test/output.mp4',
+    });
+
+    expect(result.status).toBeDefined();
+    // Should fetch video clips (voiceover + 2 clips = 3 fetch calls)
+    const fetchCalls = mockFetch.mock.calls.map((c: any[]) => c[0]);
+    expect(fetchCalls).toContain('https://example.com/clip1.mp4');
+    expect(fetchCalls).toContain('https://example.com/clip2.mp4');
+
+    vi.unstubAllGlobals();
+  });
 });

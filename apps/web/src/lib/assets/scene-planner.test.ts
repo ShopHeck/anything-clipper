@@ -16,7 +16,9 @@ const mockAssets: ProductAssets = {
 
 const mockScript = {
   hook: 'Stop scrolling! You need this.',
-  keyPoints: 'This serum hydrates instantly and fights aging.',
+  problem: 'Tired of dry, flaky skin every winter?',
+  solution: 'This serum hydrates instantly and fights aging.',
+  demo: 'Just two drops morning and night for glowing skin.',
   cta: 'Get yours before the sale ends!',
 };
 
@@ -29,11 +31,13 @@ const mockProductData = {
   soldCount: '12.4K+',
 };
 
-// Simulates TTS timings with pauses between sections
+// Simulates TTS timings with pauses between sections (5-section format)
 const mockTimings = [
   { section: 'hook', startSec: 0, endSec: 4.0 },
-  { section: 'keyPoints', startSec: 4.3, endSec: 10.0 },
-  { section: 'cta', startSec: 10.3, endSec: 14.5 },
+  { section: 'problem', startSec: 4.3, endSec: 8.0 },
+  { section: 'solution', startSec: 8.3, endSec: 14.0 },
+  { section: 'demo', startSec: 14.3, endSec: 20.0 },
+  { section: 'cta', startSec: 20.3, endSec: 24.5 },
 ];
 
 function buildInput(overrides?: Partial<ScenePlannerInput>): ScenePlannerInput {
@@ -54,7 +58,7 @@ describe('planScenes', () => {
 
   it('produces a scene for every timing section', () => {
     const result = planScenes(buildInput());
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(5);
   });
 
   it('covers the full TTS duration with no gaps', () => {
@@ -70,19 +74,19 @@ describe('planScenes', () => {
 
     // Last scene extends to at least the last timing end
     const lastScene = result[result.length - 1];
-    expect(lastScene.endSec).toBeGreaterThanOrEqual(14.5);
+    expect(lastScene.endSec).toBeGreaterThanOrEqual(24.5);
   });
 
   it('fills pauses between sections by extending previous scene', () => {
     const result = planScenes(buildInput());
 
-    // The hook scene (0-4.0) should be extended to cover the pause until keyPoints (4.3)
+    // The hook scene (0-4.0) should be extended to cover the pause until problem (4.3)
     expect(result[0].startSec).toBe(0);
     expect(result[0].endSec).toBe(4.3); // Extended to fill the gap
 
-    // keyPoints scene starts at 4.3
+    // problem scene starts at 4.3
     expect(result[1].startSec).toBe(4.3);
-    expect(result[1].endSec).toBe(10.3); // Extended to fill gap before cta
+    expect(result[1].endSec).toBe(8.3); // Extended to fill gap before solution
   });
 
   it('assigns correct asset types per script section', () => {
@@ -90,10 +94,14 @@ describe('planScenes', () => {
 
     // hook -> product-image
     expect(result[0].type).toBe('product-image');
-    // keyPoints -> lifestyle
+    // problem -> lifestyle
     expect(result[1].type).toBe('lifestyle');
+    // solution -> lifestyle
+    expect(result[2].type).toBe('lifestyle');
+    // demo -> product-image
+    expect(result[3].type).toBe('product-image');
     // cta -> text-overlay
-    expect(result[2].type).toBe('text-overlay');
+    expect(result[4].type).toBe('text-overlay');
   });
 
   it('assigns product image URLs to product-image scenes', () => {
@@ -111,7 +119,7 @@ describe('planScenes', () => {
     const result = planScenes(buildInput());
 
     const lifestyleScenes = result.filter((s) => s.type === 'lifestyle');
-    expect(lifestyleScenes.length).toBe(1);
+    expect(lifestyleScenes.length).toBe(2);
     for (const scene of lifestyleScenes) {
       expect(scene.assetUrl).toBeDefined();
       expect(scene.assetUrl).toContain('lifestyle-');
@@ -162,19 +170,12 @@ describe('planScenes', () => {
     // With 3 product images and multiple product-image scenes
     const timings = [
       { section: 'hook', startSec: 0, endSec: 2 },
-      { section: 'cta', startSec: 2, endSec: 4 },
+      { section: 'demo', startSec: 2, endSec: 4 },
     ];
-    const minScript = {
-      hook: 'a',
-      keyPoints: '',
-      cta: 'c',
-    };
 
-    const result = planScenes(
-      buildInput({ timings, script: minScript })
-    );
+    const result = planScenes(buildInput({ timings }));
 
-    // hook uses product-1, cta (text-overlay) uses product-2
+    // hook uses product-1, demo uses product-2
     expect(result[0].assetUrl).toBe('https://storage.example.com/product-1.jpg');
     expect(result[1].assetUrl).toBe('https://storage.example.com/product-2.jpg');
   });
@@ -190,12 +191,14 @@ describe('planScenes', () => {
   it('handles timings with no gaps (continuous sections)', () => {
     const continuousTimings = [
       { section: 'hook', startSec: 0, endSec: 5 },
-      { section: 'keyPoints', startSec: 5, endSec: 10 },
-      { section: 'cta', startSec: 10, endSec: 15 },
+      { section: 'problem', startSec: 5, endSec: 10 },
+      { section: 'solution', startSec: 10, endSec: 15 },
+      { section: 'demo', startSec: 15, endSec: 20 },
+      { section: 'cta', startSec: 20, endSec: 25 },
     ];
 
     const result = planScenes(buildInput({ timings: continuousTimings }));
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(5);
 
     // No extension needed since no gaps
     expect(result[0].endSec).toBe(5);
@@ -226,9 +229,79 @@ describe('planScenes', () => {
     const result = planScenes(buildInput({ assets: emptyAssets }));
 
     // Still produces scenes with correct types/timing
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(5);
     for (const scene of result) {
       expect(scene.assetUrl).toBeUndefined();
     }
+  });
+
+  describe('video clip pipeline', () => {
+    it('uses video-clip type when videoClips are available', () => {
+      const assetsWithClips: ProductAssets = {
+        productImages: [],
+        lifestyleImages: [],
+        videoClips: [
+          { url: 'https://example.com/hook.mp4', durationSec: 5, searchQuery: 'product reveal', section: 'hook' },
+          { url: 'https://example.com/problem.mp4', durationSec: 5, searchQuery: 'dry skin', section: 'problem' },
+          { url: 'https://example.com/solution.mp4', durationSec: 7, searchQuery: 'serum application', section: 'solution' },
+          { url: 'https://example.com/demo.mp4', durationSec: 6, searchQuery: 'skincare routine', section: 'demo' },
+          { url: 'https://example.com/cta.mp4', durationSec: 4, searchQuery: 'happy woman', section: 'cta' },
+        ],
+      };
+
+      const result = planScenes(buildInput({ assets: assetsWithClips }));
+
+      expect(result).toHaveLength(5);
+      for (const scene of result) {
+        expect(scene.type).toBe('video-clip');
+        expect(scene.videoUrl).toBeDefined();
+      }
+    });
+
+    it('maps video clips to correct sections by name', () => {
+      const assetsWithClips: ProductAssets = {
+        productImages: [],
+        lifestyleImages: [],
+        videoClips: [
+          { url: 'https://example.com/hook.mp4', durationSec: 5, searchQuery: 'product reveal', section: 'hook' },
+          { url: 'https://example.com/demo.mp4', durationSec: 6, searchQuery: 'using product', section: 'demo' },
+        ],
+      };
+
+      const result = planScenes(buildInput({ assets: assetsWithClips }));
+
+      const hookScene = result[0];
+      expect(hookScene.type).toBe('video-clip');
+      expect(hookScene.videoUrl).toBe('https://example.com/hook.mp4');
+
+      // demo is the 4th section (index 3)
+      const demoScene = result[3];
+      expect(demoScene.type).toBe('video-clip');
+      expect(demoScene.videoUrl).toBe('https://example.com/demo.mp4');
+
+      // Sections without clips fall back to image types
+      const problemScene = result[1];
+      expect(problemScene.type).toBe('lifestyle');
+    });
+
+    it('fills timing gaps for video clip scenes', () => {
+      const assetsWithClips: ProductAssets = {
+        productImages: [],
+        lifestyleImages: [],
+        videoClips: [
+          { url: 'https://example.com/hook.mp4', durationSec: 5, searchQuery: 'test', section: 'hook' },
+          { url: 'https://example.com/problem.mp4', durationSec: 5, searchQuery: 'test', section: 'problem' },
+          { url: 'https://example.com/solution.mp4', durationSec: 7, searchQuery: 'test', section: 'solution' },
+          { url: 'https://example.com/demo.mp4', durationSec: 6, searchQuery: 'test', section: 'demo' },
+          { url: 'https://example.com/cta.mp4', durationSec: 4, searchQuery: 'test', section: 'cta' },
+        ],
+      };
+
+      const result = planScenes(buildInput({ assets: assetsWithClips }));
+
+      // Hook is extended to fill the gap before problem
+      expect(result[0].endSec).toBe(4.3);
+      expect(result[1].startSec).toBe(4.3);
+    });
   });
 });

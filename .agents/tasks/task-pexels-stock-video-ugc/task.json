@@ -1,0 +1,7 @@
+{
+  "task_id": "task-pexels-stock-video-ugc",
+  "task_description": "Replace the still-image-with-zoompan UGC pipeline with a real stock video pipeline using Pexels Video API. Expand script to 5 natural sections (hook/problem/solution/demo/cta) at 20-35 seconds duration, fetch actual video clips from Pexels, and stitch them with voiceover using ffmpeg video-concat instead of image-zoompan.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

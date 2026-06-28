@@ -2,6 +2,7 @@
 // all assets to a temp dir, generates ASS captions, builds the ffmpeg
 // filtergraph, runs ffmpeg, uploads the result, and cleans up.
 //
+// Supports both video clips and still images as scene assets.
 // Follows the same spawn/temp-dir/upload pattern as lib/render/process.ts.
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -100,7 +101,7 @@ export interface ComposeOptions {
  *
  * Steps:
  * 1. Create temp working directory
- * 2. Download TTS audio and scene images
+ * 2. Download TTS audio and scene assets (images or video clips)
  * 3. Download background music (if any)
  * 4. Generate ASS subtitle file from captions
  * 5. Build ffmpeg args and run the composition
@@ -116,21 +117,28 @@ export async function composeUGCVideo(opts: ComposeOptions): Promise<UGCComposeR
     const ttsAudioPath = path.join(workDir, 'voiceover.mp3');
     await downloadFile(spec.ttsAudioUrl, ttsAudioPath);
 
-    // Download scene images
-    const sceneImagePaths: string[] = [];
+    // Download scene assets (images or video clips)
+    const sceneAssetPaths: string[] = [];
     for (let i = 0; i < spec.scenes.length; i++) {
-      const imageUrl = spec.scenes[i].imageUrl;
-      if (!imageUrl) {
-        // No image URL available - generate a solid-color placeholder PNG
+      const scene = spec.scenes[i];
+
+      if (scene.isVideoClip && scene.videoUrl) {
+        // Download video clip
+        const videoPath = path.join(workDir, `scene_${i}.mp4`);
+        await downloadFile(scene.videoUrl, videoPath);
+        sceneAssetPaths.push(videoPath);
+      } else if (scene.imageUrl) {
+        // Download image
+        const ext = scene.imageUrl.match(/\.(png|jpg|jpeg|webp)/i)?.[1] ?? 'jpg';
+        const imgPath = path.join(workDir, `scene_${i}.${ext}`);
+        await downloadFile(scene.imageUrl, imgPath);
+        sceneAssetPaths.push(imgPath);
+      } else {
+        // No asset URL - generate a solid-color placeholder PNG
         const imgPath = path.join(workDir, `scene_${i}.png`);
         const pngBuffer = createSolidPNG(1080, 1920, [0x1a, 0x1a, 0x2e]);
         await writeFile(imgPath, pngBuffer);
-        sceneImagePaths.push(imgPath);
-      } else {
-        const ext = imageUrl.match(/\.(png|jpg|jpeg|webp)/i)?.[1] ?? 'jpg';
-        const imgPath = path.join(workDir, `scene_${i}.${ext}`);
-        await downloadFile(imageUrl, imgPath);
-        sceneImagePaths.push(imgPath);
+        sceneAssetPaths.push(imgPath);
       }
     }
 
@@ -151,7 +159,7 @@ export async function composeUGCVideo(opts: ComposeOptions): Promise<UGCComposeR
       throw new Error('Video duration too short - check TTS audio and scene timing.');
     }
 
-    // Captions disabled — clean video with voiceover + images only
+    // Captions disabled - clean video with voiceover + assets only
     const assPath: string | undefined = undefined;
 
     // Build ffmpeg args
@@ -159,7 +167,7 @@ export async function composeUGCVideo(opts: ComposeOptions): Promise<UGCComposeR
     const args = buildUGCFfmpegArgs({
       spec,
       ttsAudioPath,
-      sceneImagePaths,
+      sceneAssetPaths,
       musicPath,
       assPath,
       outPath,

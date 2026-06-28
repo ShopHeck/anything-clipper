@@ -1,6 +1,6 @@
 // Types for the UGC video composition engine.
 // Mirrors the render pipeline's RenderSpec pattern, adapted for
-// composing a new video from still images + voiceover audio.
+// composing a new video from still images or video clips + voiceover audio.
 
 import type { AspectRatio, SpecWord } from '@/lib/render/types';
 
@@ -24,6 +24,10 @@ export interface UGCScene {
   overlayText?: string;
   /** Vertical position for the text overlay. Defaults to 'bottom'. */
   overlayPosition?: OverlayPosition;
+  /** When true, this scene uses a video clip instead of a still image. */
+  isVideoClip?: boolean;
+  /** URL to the video clip file (when isVideoClip is true). */
+  videoUrl?: string;
 }
 
 /** Full render specification for a UGC video composition. */

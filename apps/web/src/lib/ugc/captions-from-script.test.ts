@@ -4,14 +4,18 @@ import type { SectionTiming, UGCScript } from '@/lib/tts/types';
 
 const sampleScript: UGCScript = {
   hook: 'This product is amazing',
-  keyPoints: 'Hydrates instantly and fights aging like nothing else',
+  problem: 'Dry skin is the worst especially in winter',
+  solution: 'This serum hydrates instantly and fights aging like nothing else',
+  demo: 'Just apply two drops morning and night and watch the glow',
   cta: 'Buy now and save fifty percent',
 };
 
 const sampleTimings: SectionTiming[] = [
   { section: 'hook', startSec: 0, endSec: 4 },
-  { section: 'keyPoints', startSec: 4.3, endSec: 10 },
-  { section: 'cta', startSec: 10.3, endSec: 14 },
+  { section: 'problem', startSec: 4.3, endSec: 8 },
+  { section: 'solution', startSec: 8.3, endSec: 14 },
+  { section: 'demo', startSec: 14.3, endSec: 20 },
+  { section: 'cta', startSec: 20.3, endSec: 24 },
 ];
 
 describe('captionsFromScript', () => {
@@ -22,7 +26,9 @@ describe('captionsFromScript', () => {
     // Should have a word for every word in the script
     const totalScriptWords =
       sampleScript.hook.split(/\s+/).length +
-      sampleScript.keyPoints.split(/\s+/).length +
+      sampleScript.problem.split(/\s+/).length +
+      sampleScript.solution.split(/\s+/).length +
+      sampleScript.demo.split(/\s+/).length +
       sampleScript.cta.split(/\s+/).length;
     expect(words.length).toBe(totalScriptWords);
   });
@@ -58,7 +64,9 @@ describe('captionsFromScript', () => {
   it('handles empty sections gracefully', () => {
     const partialScript: UGCScript = {
       hook: 'Hello world',
-      keyPoints: '',
+      problem: '',
+      solution: '',
+      demo: '',
       cta: 'Buy now',
     };
     const timings: SectionTiming[] = [
@@ -96,7 +104,9 @@ describe('captionsFromScript', () => {
   it('returns empty array for empty script/timings', () => {
     const emptyScript: UGCScript = {
       hook: '',
-      keyPoints: '',
+      problem: '',
+      solution: '',
+      demo: '',
       cta: '',
     };
     const words = captionsFromScript(emptyScript, []);
@@ -117,14 +127,24 @@ describe('captionsFromScript', () => {
   it('correctly positions words within their section timing window', () => {
     const words = captionsFromScript(sampleScript, sampleTimings);
 
-    // keyPoints section words should be within [4.3, 10]
+    // problem section words should be within [4.3, 8]
     const hookWordCount = sampleScript.hook.split(/\s+/).length;
-    const keyPointsWordCount = sampleScript.keyPoints.split(/\s+/).length;
+    const problemWordCount = sampleScript.problem.split(/\s+/).length;
 
-    const keyPointsWords = words.slice(hookWordCount, hookWordCount + keyPointsWordCount);
-    for (const w of keyPointsWords) {
+    const problemWords = words.slice(hookWordCount, hookWordCount + problemWordCount);
+    for (const w of problemWords) {
       expect(w.start).toBeGreaterThanOrEqual(4.3);
-      expect(w.end).toBeLessThanOrEqual(10);
+      expect(w.end).toBeLessThanOrEqual(8);
     }
+  });
+
+  it('handles all 5 sections correctly', () => {
+    const words = captionsFromScript(sampleScript, sampleTimings);
+
+    // Verify words from the demo section exist
+    const demoText = sampleScript.demo;
+    const demoFirstWord = demoText.split(/\s+/)[0];
+    const foundDemoWord = words.find((w) => w.text === demoFirstWord && w.start >= 14.3);
+    expect(foundDemoWord).toBeDefined();
   });
 });
