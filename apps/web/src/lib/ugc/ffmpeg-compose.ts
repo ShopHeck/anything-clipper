@@ -49,11 +49,11 @@ export function buildZoompanFilter(
 
   switch (direction) {
     case 'in':
-      // Zoom from 1.0 to 1.15 over the duration
-      return `zoompan=z='min(1+0.15*on/${durationFrames}\\,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
+      // Zoom from 1.0 to 1.25 over the duration
+      return `zoompan=z='min(1+0.25*on/${durationFrames}\\,1.25)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
     case 'out':
-      // Zoom from 1.15 to 1.0 over the duration
-      return `zoompan=z='max(1.15-0.15*on/${durationFrames}\\,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
+      // Zoom from 1.25 to 1.0 over the duration
+      return `zoompan=z='max(1.25-0.25*on/${durationFrames}\\,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
     case 'pan-left':
       // Fixed zoom at 1.1, pan from right to left
       return `zoompan=z='1.1':x='iw/2-(iw/zoom/2)+iw*0.05*(1-on/${durationFrames})':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
@@ -62,7 +62,7 @@ export function buildZoompanFilter(
       return `zoompan=z='1.1':x='iw/2-(iw/zoom/2)+iw*0.05*(on/${durationFrames}-1)':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
     default:
       // Default to zoom in
-      return `zoompan=z='min(1+0.15*on/${durationFrames}\\,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
+      return `zoompan=z='min(1+0.25*on/${durationFrames}\\,1.25)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${durationFrames}:s=${size}:fps=30`;
   }
 }
 

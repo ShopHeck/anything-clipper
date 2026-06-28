@@ -100,24 +100,18 @@ const mockProduct: ProductData = {
 };
 
 const mockScript: UGCScript = {
-  hook: 'This serum changed my skin overnight',
-  problem: 'My skin was so dry and nothing worked. I tried everything.',
-  solution: 'Then I found Test Serum for only $24.99 and everything changed.',
-  demo: 'Look at this texture - it absorbs instantly and leaves no residue.',
-  socialProof: '4.8 stars and over 12K sold. The reviews are insane.',
-  cta: 'Link in bio before it sells out. Trust me on this one.',
+  hook: 'This serum changed my skin',
+  keyPoints: 'Hydrates instantly, anti-aging formula for only $24.99',
+  cta: 'Link in bio before it sells out',
 };
 
 const mockTTSResult = {
   audioUrl: 'https://storage.example.com/tts/u1/proj-1.mp3?sig=xyz',
-  durationSec: 28.5,
+  durationSec: 14.5,
   timings: [
-    { section: 'hook', startSec: 0, endSec: 3.0 },
-    { section: 'problem', startSec: 3.6, endSec: 8.5 },
-    { section: 'solution', startSec: 9.1, endSec: 14.2 },
-    { section: 'demo', startSec: 14.8, endSec: 20.0 },
-    { section: 'socialProof', startSec: 20.6, endSec: 24.5 },
-    { section: 'cta', startSec: 25.1, endSec: 28.5 },
+    { section: 'hook', startSec: 0, endSec: 4.5 },
+    { section: 'keyPoints', startSec: 4.8, endSec: 10.5 },
+    { section: 'cta', startSec: 10.8, endSec: 14.5 },
   ],
 };
 
@@ -292,7 +286,7 @@ describe('orchestrate', () => {
       expect(scriptToAudio).toHaveBeenCalledWith({
         script: mockScript,
         voice: 'echo',
-        speed: 1.0,
+        speed: 1.2,
         storageKey: 'tts/u1/proj-1.mp3',
       });
     });
@@ -382,12 +376,9 @@ describe('orchestrate', () => {
   describe('buildRenderSpec', () => {
     it('converts scene plan to a UGCRenderSpec with captions', () => {
       const scenePlan = [
-        { startSec: 0, endSec: 3.0, type: 'product-image' as const, assetUrl: 'https://img1.jpg' },
-        { startSec: 3.6, endSec: 8.5, type: 'lifestyle' as const, assetUrl: 'https://img2.jpg' },
-        { startSec: 9.1, endSec: 14.2, type: 'lifestyle' as const, assetUrl: 'https://img3.jpg' },
-        { startSec: 14.8, endSec: 20.0, type: 'product-image' as const, assetUrl: 'https://img4.jpg' },
-        { startSec: 20.6, endSec: 24.5, type: 'text-overlay' as const, assetUrl: 'https://img5.jpg', overlayText: '4.8 stars | 12K+ sold' },
-        { startSec: 25.1, endSec: 28.5, type: 'text-overlay' as const, assetUrl: 'https://img6.jpg', overlayText: 'Test Serum - $24.99' },
+        { startSec: 0, endSec: 4.5, type: 'product-image' as const, assetUrl: 'https://img1.jpg' },
+        { startSec: 4.8, endSec: 10.5, type: 'lifestyle' as const, assetUrl: 'https://img2.jpg' },
+        { startSec: 10.8, endSec: 14.5, type: 'text-overlay' as const, assetUrl: 'https://img3.jpg', overlayText: 'Test Serum - $24.99' },
       ];
 
       const spec = buildRenderSpec(
@@ -399,7 +390,7 @@ describe('orchestrate', () => {
       );
 
       expect(spec.ttsAudioUrl).toBe(mockTTSResult.audioUrl);
-      expect(spec.scenes).toHaveLength(6);
+      expect(spec.scenes).toHaveLength(3);
       expect(spec.aspect).toBe('9:16');
       expect(spec.captionTemplateId).toBe('karaoke-pop');
       expect(spec.captions.length).toBeGreaterThan(0);
@@ -412,7 +403,7 @@ describe('orchestrate', () => {
 
     it('uses default caption template when none specified', () => {
       const scenePlan = [
-        { startSec: 0, endSec: 3.0, type: 'product-image' as const, assetUrl: 'https://img1.jpg' },
+        { startSec: 0, endSec: 4.5, type: 'product-image' as const, assetUrl: 'https://img1.jpg' },
       ];
 
       const spec = buildRenderSpec(

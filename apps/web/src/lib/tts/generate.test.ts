@@ -132,14 +132,14 @@ describe('estimateDuration', () => {
   });
 
   it('estimates duration based on character count', () => {
-    // 14 chars at speed 1.0 = 1 second
-    const result = estimateDuration('Hello, World!!'); // 14 chars
+    // 17 chars at speed 1.0 = 1 second (CHARS_PER_SECOND = 17)
+    const result = estimateDuration('A'.repeat(17));
     expect(result).toBe(1);
   });
 
   it('adjusts duration by speed', () => {
-    // 28 chars at speed 2.0 = 1 second
-    const result = estimateDuration('A'.repeat(28), 2.0);
+    // 34 chars at speed 2.0 = 1 second
+    const result = estimateDuration('A'.repeat(34), 2.0);
     expect(result).toBe(1);
   });
 
@@ -152,53 +152,37 @@ describe('estimateDuration', () => {
 
 describe('calculateTimings', () => {
   const mockScript: UGCScript = {
-    hook: 'A'.repeat(14), // 1 second
-    problem: 'B'.repeat(28), // 2 seconds
-    solution: 'C'.repeat(42), // 3 seconds
-    demo: 'D'.repeat(14), // 1 second
-    socialProof: 'E'.repeat(28), // 2 seconds
-    cta: 'F'.repeat(14), // 1 second
+    hook: 'A'.repeat(17), // 1 second
+    keyPoints: 'B'.repeat(34), // 2 seconds
+    cta: 'C'.repeat(17), // 1 second
   };
 
   it('calculates correct start/end times for each section', () => {
     const timings = calculateTimings(mockScript, 1.0);
 
-    expect(timings).toHaveLength(6);
+    expect(timings).toHaveLength(3);
 
     // hook: 0 -> 1
     expect(timings[0]).toEqual({ section: 'hook', startSec: 0, endSec: 1 });
 
-    // problem: 1 + 0.6 pause = 1.6 -> 3.6
-    expect(timings[1]).toEqual({ section: 'problem', startSec: 1.6, endSec: 3.6 });
+    // keyPoints: 1 + 0.3 pause = 1.3 -> 3.3
+    expect(timings[1]).toEqual({ section: 'keyPoints', startSec: 1.3, endSec: 3.3 });
 
-    // solution: 3.6 + 0.6 = 4.2 -> 7.2
-    expect(timings[2]).toEqual({ section: 'solution', startSec: 4.2, endSec: 7.2 });
-
-    // demo: 7.2 + 0.6 = 7.8 -> 8.8
-    expect(timings[3]).toEqual({ section: 'demo', startSec: 7.8, endSec: 8.8 });
-
-    // socialProof: 8.8 + 0.6 = 9.4 -> 11.4
-    expect(timings[4]).toEqual({ section: 'socialProof', startSec: 9.4, endSec: 11.4 });
-
-    // cta: 11.4 + 0.6 = 12.0 -> 13.0
-    expect(timings[5]).toEqual({ section: 'cta', startSec: 12, endSec: 13 });
+    // cta: 3.3 + 0.3 = 3.6 -> 4.6
+    expect(timings[2]).toEqual({ section: 'cta', startSec: 3.6, endSec: 4.6 });
   });
 
   it('skips empty sections', () => {
     const partial: UGCScript = {
-      hook: 'A'.repeat(14),
-      problem: '',
-      solution: 'C'.repeat(14),
-      demo: '',
-      socialProof: '',
-      cta: 'F'.repeat(14),
+      hook: 'A'.repeat(17),
+      keyPoints: '',
+      cta: 'C'.repeat(17),
     };
 
     const timings = calculateTimings(partial, 1.0);
-    expect(timings).toHaveLength(3);
+    expect(timings).toHaveLength(2);
     expect(timings[0].section).toBe('hook');
-    expect(timings[1].section).toBe('solution');
-    expect(timings[2].section).toBe('cta');
+    expect(timings[1].section).toBe('cta');
   });
 
   it('adjusts timing based on speed', () => {
@@ -212,13 +196,21 @@ describe('calculateTimings', () => {
   it('returns empty array for all-empty script', () => {
     const empty: UGCScript = {
       hook: '',
-      problem: '',
-      solution: '',
-      demo: '',
-      socialProof: '',
+      keyPoints: '',
       cta: '',
     };
     expect(calculateTimings(empty)).toEqual([]);
+  });
+
+  it('clamps total duration to 15 seconds when exceeded', () => {
+    const longScript: UGCScript = {
+      hook: 'A'.repeat(85), // 5 seconds
+      keyPoints: 'B'.repeat(119), // 7 seconds
+      cta: 'C'.repeat(85), // 5 seconds
+    };
+    // Total would be 5 + 0.3 + 7 + 0.3 + 5 = 17.6s, exceeds 15s
+    const timings = calculateTimings(longScript, 1.0);
+    expect(timings[timings.length - 1].endSec).toBeLessThanOrEqual(15);
   });
 });
 
@@ -226,10 +218,7 @@ describe('estimateTotalDuration', () => {
   it('returns 0 for empty script', () => {
     const empty: UGCScript = {
       hook: '',
-      problem: '',
-      solution: '',
-      demo: '',
-      socialProof: '',
+      keyPoints: '',
       cta: '',
     };
     expect(estimateTotalDuration(empty)).toBe(0);
@@ -237,15 +226,12 @@ describe('estimateTotalDuration', () => {
 
   it('returns correct total with pauses', () => {
     const script: UGCScript = {
-      hook: 'A'.repeat(14), // 1s
-      problem: 'B'.repeat(14), // 1s
-      solution: '',
-      demo: '',
-      socialProof: '',
+      hook: 'A'.repeat(17), // 1s
+      keyPoints: 'B'.repeat(17), // 1s
       cta: '',
     };
-    // 1s + 0.6s pause + 1s = 2.6s
-    expect(estimateTotalDuration(script)).toBeCloseTo(2.6, 1);
+    // 1s + 0.3s pause + 1s = 2.3s
+    expect(estimateTotalDuration(script)).toBeCloseTo(2.3, 1);
   });
 });
 
@@ -253,10 +239,7 @@ describe('buildFullText', () => {
   it('concatenates non-empty sections with pause markers', () => {
     const script: UGCScript = {
       hook: 'Stop scrolling!',
-      problem: 'You have a problem.',
-      solution: 'Here is the fix.',
-      demo: 'Watch this.',
-      socialProof: '5 stars.',
+      keyPoints: 'This serum hydrates instantly.',
       cta: 'Buy now!',
     };
 
@@ -264,18 +247,15 @@ describe('buildFullText', () => {
     expect(result).toContain('Stop scrolling!');
     expect(result).toContain('Buy now!');
     expect(result).toContain('\n\n...\n\n');
-    // 6 sections = 5 separators
-    expect(result.split('\n\n...\n\n')).toHaveLength(6);
+    // 3 sections = 2 separators
+    expect(result.split('\n\n...\n\n')).toHaveLength(3);
   });
 
   it('skips empty sections', () => {
     const script: UGCScript = {
       hook: 'Hello',
-      problem: '',
-      solution: 'World',
-      demo: '',
-      socialProof: '',
-      cta: '',
+      keyPoints: '',
+      cta: 'World',
     };
 
     const result = buildFullText(script);
@@ -285,10 +265,7 @@ describe('buildFullText', () => {
   it('returns empty string for all-empty script', () => {
     const script: UGCScript = {
       hook: '',
-      problem: '',
-      solution: '',
-      demo: '',
-      socialProof: '',
+      keyPoints: '',
       cta: '',
     };
     expect(buildFullText(script)).toBe('');

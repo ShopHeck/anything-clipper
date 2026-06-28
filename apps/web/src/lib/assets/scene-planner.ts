@@ -7,10 +7,7 @@ import type { ProductAssets, ScenePlan } from './types';
 /** Script section to visual asset type mapping. */
 const SECTION_ASSET_MAP: Record<string, ScenePlan['type']> = {
   hook: 'product-image',
-  problem: 'lifestyle',
-  solution: 'lifestyle',
-  demo: 'product-image',
-  socialProof: 'text-overlay',
+  keyPoints: 'lifestyle',
   cta: 'text-overlay',
 };
 
@@ -35,10 +32,7 @@ export interface ScenePlannerInput {
   /** The script text for text overlays. */
   script: {
     hook: string;
-    problem: string;
-    solution: string;
-    demo: string;
-    socialProof: string;
+    keyPoints: string;
     cta: string;
   };
 }
@@ -71,13 +65,6 @@ function getOverlayText(
   script: ScenePlannerInput['script'],
   productData: ScenePlannerInput['productData']
 ): string {
-  if (section === 'socialProof') {
-    const parts: string[] = [];
-    if (productData.rating) parts.push(`${productData.rating} stars`);
-    if (productData.soldCount) parts.push(`${productData.soldCount} sold`);
-    if (parts.length > 0) return parts.join(' | ');
-    return script.socialProof.slice(0, 80);
-  }
   if (section === 'cta') {
     const parts: string[] = [productData.name];
     if (productData.price) parts.push(productData.price);
@@ -92,10 +79,8 @@ function getOverlayText(
  *
  * Rules:
  * - hook section: product close-up (product-image)
- * - problem/solution sections: lifestyle shots
- * - demo section: product images
- * - socialProof section: text overlay with rating/sales
- * - cta section: product + price overlay
+ * - keyPoints section: lifestyle shots
+ * - cta section: product + price overlay (text-overlay)
  *
  * The resulting plan covers the entire TTS duration with no gaps.
  * Gaps between section timings (pauses) are filled by extending the

@@ -4,20 +4,14 @@ import type { SectionTiming, UGCScript } from '@/lib/tts/types';
 
 const sampleScript: UGCScript = {
   hook: 'This product is amazing',
-  problem: 'My skin was always dry and flaky',
-  solution: 'Until I found this moisturizer',
-  demo: 'Apply twice daily for best results',
-  socialProof: 'Five stars from thousands of users',
+  keyPoints: 'Hydrates instantly and fights aging like nothing else',
   cta: 'Buy now and save fifty percent',
 };
 
 const sampleTimings: SectionTiming[] = [
-  { section: 'hook', startSec: 0, endSec: 2 },
-  { section: 'problem', startSec: 2.6, endSec: 5 },
-  { section: 'solution', startSec: 5.6, endSec: 8 },
-  { section: 'demo', startSec: 8.6, endSec: 11 },
-  { section: 'socialProof', startSec: 11.6, endSec: 14 },
-  { section: 'cta', startSec: 14.6, endSec: 17 },
+  { section: 'hook', startSec: 0, endSec: 4 },
+  { section: 'keyPoints', startSec: 4.3, endSec: 10 },
+  { section: 'cta', startSec: 10.3, endSec: 14 },
 ];
 
 describe('captionsFromScript', () => {
@@ -28,10 +22,7 @@ describe('captionsFromScript', () => {
     // Should have a word for every word in the script
     const totalScriptWords =
       sampleScript.hook.split(/\s+/).length +
-      sampleScript.problem.split(/\s+/).length +
-      sampleScript.solution.split(/\s+/).length +
-      sampleScript.demo.split(/\s+/).length +
-      sampleScript.socialProof.split(/\s+/).length +
+      sampleScript.keyPoints.split(/\s+/).length +
       sampleScript.cta.split(/\s+/).length;
     expect(words.length).toBe(totalScriptWords);
   });
@@ -39,8 +30,8 @@ describe('captionsFromScript', () => {
   it('distributes timing proportionally by character count', () => {
     const words = captionsFromScript(sampleScript, sampleTimings);
 
-    // First section "This product is amazing" (0 to 2 seconds)
-    const hookWords = words.filter((w) => w.start >= 0 && w.end <= 2);
+    // First section "This product is amazing" (0 to 4 seconds)
+    const hookWords = words.filter((w) => w.start >= 0 && w.end <= 4);
     expect(hookWords.length).toBe(4); // "This", "product", "is", "amazing"
 
     // Longer words should get more time
@@ -61,31 +52,25 @@ describe('captionsFromScript', () => {
     // Check last word of first section ends at section end
     const hookWordCount = sampleScript.hook.split(/\s+/).length;
     const lastHookWord = words[hookWordCount - 1];
-    expect(lastHookWord.end).toBe(2);
+    expect(lastHookWord.end).toBe(4);
   });
 
   it('handles empty sections gracefully', () => {
     const partialScript: UGCScript = {
       hook: 'Hello world',
-      problem: '',
-      solution: 'The fix',
-      demo: '',
-      socialProof: '',
+      keyPoints: '',
       cta: 'Buy now',
     };
     const timings: SectionTiming[] = [
       { section: 'hook', startSec: 0, endSec: 2 },
-      { section: 'solution', startSec: 2.6, endSec: 4 },
-      { section: 'cta', startSec: 4.6, endSec: 6 },
+      { section: 'cta', startSec: 2.3, endSec: 4 },
     ];
     const words = captionsFromScript(partialScript, timings);
-    expect(words.length).toBe(6); // "Hello", "world", "The", "fix", "Buy", "now"
+    expect(words.length).toBe(4); // "Hello", "world", "Buy", "now"
     expect(words[0].text).toBe('Hello');
     expect(words[1].text).toBe('world');
-    expect(words[2].text).toBe('The');
-    expect(words[3].text).toBe('fix');
-    expect(words[4].text).toBe('Buy');
-    expect(words[5].text).toBe('now');
+    expect(words[2].text).toBe('Buy');
+    expect(words[3].text).toBe('now');
   });
 
   it('handles unknown section names in timings', () => {
@@ -111,10 +96,7 @@ describe('captionsFromScript', () => {
   it('returns empty array for empty script/timings', () => {
     const emptyScript: UGCScript = {
       hook: '',
-      problem: '',
-      solution: '',
-      demo: '',
-      socialProof: '',
+      keyPoints: '',
       cta: '',
     };
     const words = captionsFromScript(emptyScript, []);
@@ -135,14 +117,14 @@ describe('captionsFromScript', () => {
   it('correctly positions words within their section timing window', () => {
     const words = captionsFromScript(sampleScript, sampleTimings);
 
-    // Problem section words should be within [2.6, 5]
+    // keyPoints section words should be within [4.3, 10]
     const hookWordCount = sampleScript.hook.split(/\s+/).length;
-    const problemWordCount = sampleScript.problem.split(/\s+/).length;
+    const keyPointsWordCount = sampleScript.keyPoints.split(/\s+/).length;
 
-    const problemWords = words.slice(hookWordCount, hookWordCount + problemWordCount);
-    for (const w of problemWords) {
-      expect(w.start).toBeGreaterThanOrEqual(2.6);
-      expect(w.end).toBeLessThanOrEqual(5);
+    const keyPointsWords = words.slice(hookWordCount, hookWordCount + keyPointsWordCount);
+    for (const w of keyPointsWords) {
+      expect(w.start).toBeGreaterThanOrEqual(4.3);
+      expect(w.end).toBeLessThanOrEqual(10);
     }
   });
 });

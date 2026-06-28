@@ -40,10 +40,7 @@ interface UGCJob {
   productData: Record<string, unknown> | null;
   script: {
     hook?: string;
-    problem?: string;
-    solution?: string;
-    demo?: string;
-    socialProof?: string;
+    keyPoints?: string;
     cta?: string;
   } | null;
   ttsAudioUrl: string | null;
@@ -85,10 +82,7 @@ const PIPELINE_STAGES: { key: UGCStatus; label: string; icon: typeof Play }[] = 
 
 const SCRIPT_SECTIONS: { key: string; label: string }[] = [
   { key: 'hook', label: 'Hook' },
-  { key: 'problem', label: 'Problem' },
-  { key: 'solution', label: 'Solution' },
-  { key: 'demo', label: 'Demo' },
-  { key: 'socialProof', label: 'Social Proof' },
+  { key: 'keyPoints', label: 'Key Points' },
   { key: 'cta', label: 'CTA' },
 ];
 

@@ -28,10 +28,7 @@ export interface AssetGenerationRequest {
   /** The UGC script to plan scenes for. */
   script: {
     hook: string;
-    problem: string;
-    solution: string;
-    demo: string;
-    socialProof: string;
+    keyPoints: string;
     cta: string;
   };
   /** TTS timing markers from scriptToAudio. */

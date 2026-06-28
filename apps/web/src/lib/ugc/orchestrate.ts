@@ -249,22 +249,22 @@ export async function generateUGCScript(
 ): Promise<UGCScript> {
   const stylePrompt =
     templateStyle === 'pov'
-      ? 'Use POV: format hooks. Short, punchy, relatable.'
+      ? 'Use POV: format hooks. Ultra-short, punchy, relatable.'
       : templateStyle === 'storytime'
-        ? 'Use storytime hooks. Personal, emotional, narrative-driven.'
+        ? 'Use storytime hooks. Brief, emotional, personal.'
         : templateStyle === 'bold-hook'
-          ? 'Use bold, direct claims. Numbers and stats when possible.'
-          : 'Use authentic UGC creator style. Conversational, genuine, excited.';
+          ? 'Use bold, direct claims. Numbers when possible.'
+          : 'Use authentic UGC creator style. Brief, genuine, excited.';
 
   const script = await chatCompletionJson<UGCScript>(
     [
       {
         role: 'system',
-        content: `You are an elite UGC video script writer specializing in TikTok Shop affiliate content. ${stylePrompt}`,
+        content: `You are an elite UGC video script writer specializing in 15-second TikTok Shop content. ${stylePrompt} Every word must earn its place. Scripts must be under 200 characters total.`,
       },
       {
         role: 'user',
-        content: `Write a complete UGC product video script for TikTok/Reels.\n\nProduct: ${product.name}\nPrice: ${product.price}${product.originalPrice ? ` (was ${product.originalPrice})` : ''}\nRating: ${product.rating ?? 'N/A'} stars, ${product.soldCount ?? 'N/A'} sold\nShop: ${product.shopName ?? 'Unknown'}\nCategory: ${product.category ?? 'General'}\nKey features:\n${(product.features ?? []).map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nCreate a script that sounds authentic, NOT like an ad. Each section should be 1-3 sentences max.`,
+        content: `Write an ultra-short 15-second TikTok UGC script for this product.\n\nProduct: ${product.name}\nPrice: ${product.price}${product.originalPrice ? ` (was ${product.originalPrice})` : ''}\nRating: ${product.rating ?? 'N/A'} stars, ${product.soldCount ?? 'N/A'} sold\nKey features:\n${(product.features ?? []).slice(0, 3).map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nRules:\n- hook: max 8 words, stop-scroll opener\n- keyPoints: max 15 words, one punchy benefit statement\n- cta: max 8 words, urgent call to action\n- Total script MUST be under 200 characters\n- Sound like a real person, NOT an ad`,
       },
     ],
     {
@@ -273,13 +273,10 @@ export async function generateUGCScript(
         type: 'object',
         properties: {
           hook: { type: 'string' },
-          problem: { type: 'string' },
-          solution: { type: 'string' },
-          demo: { type: 'string' },
-          socialProof: { type: 'string' },
+          keyPoints: { type: 'string' },
           cta: { type: 'string' },
         },
-        required: ['hook', 'problem', 'solution', 'demo', 'socialProof', 'cta'],
+        required: ['hook', 'keyPoints', 'cta'],
         additionalProperties: false,
       },
     }
@@ -302,7 +299,7 @@ export async function generateTTSAudio(
   return scriptToAudio({
     script,
     voice: voice ?? 'nova',
-    speed: 1.0,
+    speed: 1.2,
     storageKey,
   });
 }

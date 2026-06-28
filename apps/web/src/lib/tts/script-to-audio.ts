@@ -5,19 +5,19 @@ import { presignDownload, presignUpload } from '@/app/api/utils/storage';
 import { generateTTS } from './generate';
 import type { ScriptToAudioResult, SectionTiming, TTSVoice, UGCScript } from './types';
 
-/** Average speaking rate in characters per second at speed 1.0 (OpenAI TTS). */
-const CHARS_PER_SECOND = 14;
+/** Average speaking rate in characters per second at speed 1.2 (OpenAI TTS). */
+const CHARS_PER_SECOND = 17;
 
 /** Pause duration in seconds between script sections. */
-const SECTION_PAUSE_SEC = 0.6;
+const SECTION_PAUSE_SEC = 0.3;
+
+/** Maximum total video/audio duration in seconds. */
+const MAX_DURATION_SEC = 15;
 
 /** Ordered sections from a UGC script for voiceover. */
 const SCRIPT_SECTIONS: (keyof UGCScript)[] = [
   'hook',
-  'problem',
-  'solution',
-  'demo',
-  'socialProof',
+  'keyPoints',
   'cta',
 ];
 
@@ -35,6 +35,7 @@ export function estimateDuration(text: string, speed = 1.0): number {
  * Calculate per-section timing markers for a UGC script.
  * Returns the timing of each section within the concatenated audio,
  * including pauses between sections.
+ * If total exceeds MAX_DURATION_SEC, proportionally compresses all durations to fit.
  */
 export function calculateTimings(script: UGCScript, speed = 1.0): SectionTiming[] {
   const timings: SectionTiming[] = [];
@@ -57,6 +58,18 @@ export function calculateTimings(script: UGCScript, speed = 1.0): SectionTiming[
     // Add pause after each section except the last
     if (i < SCRIPT_SECTIONS.length - 1) {
       cursor += SECTION_PAUSE_SEC;
+    }
+  }
+
+  // If total exceeds MAX_DURATION_SEC, proportionally compress to fit
+  if (timings.length > 0) {
+    const totalDuration = timings[timings.length - 1].endSec;
+    if (totalDuration > MAX_DURATION_SEC) {
+      const scale = MAX_DURATION_SEC / totalDuration;
+      for (const timing of timings) {
+        timing.startSec = Math.round(timing.startSec * scale * 100) / 100;
+        timing.endSec = Math.round(timing.endSec * scale * 100) / 100;
+      }
     }
   }
 
