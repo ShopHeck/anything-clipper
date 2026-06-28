@@ -357,6 +357,12 @@ export async function gatherAssets(
   };
 
   // If PEXELS_API_KEY is set and we have search queries, fetch video clips
+  if (!process.env.PEXELS_API_KEY) {
+    console.warn(
+      '[UGC] PEXELS_API_KEY is not set — falling back to image-based pipeline. Set the env var to enable stock video clips.'
+    );
+  }
+
   if (process.env.PEXELS_API_KEY && scriptWithQueries?.searchQueries) {
     const sections = ['hook', 'problem', 'solution', 'demo', 'cta'] as const;
     for (const section of sections) {

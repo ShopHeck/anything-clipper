@@ -50,7 +50,7 @@ export function pickBestFile(files: PexelsVideoFile[]): PexelsVideoFile | undefi
   if (hdFile) return hdFile;
 
   // Fall back to largest by total pixel count
-  return candidates.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+  return [...candidates].sort((a, b) => b.width * b.height - a.width * a.height)[0];
 }
 
 /**
