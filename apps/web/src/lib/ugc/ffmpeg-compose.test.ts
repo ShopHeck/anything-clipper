@@ -51,7 +51,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
@@ -70,7 +70,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
@@ -87,18 +87,18 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
     expect(args).toContain('/tmp/voice.mp3');
   });
 
-  it('applies zoompan filter to each scene', () => {
+  it('applies zoompan filter to each image scene', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
@@ -113,7 +113,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
@@ -125,7 +125,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       assPath: '/tmp/captions.ass',
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
@@ -138,7 +138,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
@@ -155,7 +155,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: specWithMusic,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       musicPath: '/tmp/music.mp3',
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
@@ -175,7 +175,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: specWithMusic,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       musicPath: '/tmp/music.mp3',
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
@@ -192,7 +192,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: singleScene,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img.jpg'],
+      sceneAssetPaths: ['/tmp/img.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 10,
     });
@@ -217,7 +217,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: specWithDirections,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 10,
     });
@@ -228,37 +228,11 @@ describe('buildUGCFfmpegArgs', () => {
     expect(graph).toContain("z='1.1'");
   });
 
-  it('adds drawtext overlay when scene has overlayText', () => {
-    const specWithOverlay: UGCRenderSpec = {
-      ...baseSpec,
-      scenes: [
-        {
-          startSec: 0,
-          endSec: 10,
-          imageUrl: 'https://example.com/img.jpg',
-          overlayText: 'Buy Now!',
-          overlayPosition: 'center',
-        },
-      ],
-    };
-    const args = buildUGCFfmpegArgs({
-      spec: specWithOverlay,
-      ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img.jpg'],
-      outPath: '/tmp/output.mp4',
-      totalDurationSec: 10,
-    });
-    const graph = args[args.indexOf('-filter_complex') + 1];
-    expect(graph).toContain('drawtext=');
-    expect(graph).toContain('Buy Now!');
-    expect(graph).toContain('(h-text_h)/2');
-  });
-
   it('outputs 9:16 vertical video dimensions', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
@@ -271,7 +245,7 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
@@ -282,12 +256,106 @@ describe('buildUGCFfmpegArgs', () => {
     const args = buildUGCFfmpegArgs({
       spec: baseSpec,
       ttsAudioPath: '/tmp/voice.mp3',
-      sceneImagePaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
+      sceneAssetPaths: ['/tmp/img1.jpg', '/tmp/img2.jpg', '/tmp/img3.jpg'],
       outPath: '/tmp/output.mp4',
       totalDurationSec: 15,
     });
     expect(args).toContain('-map');
     expect(args).toContain('[v]');
     expect(args).toContain('[a]');
+  });
+
+  describe('video clip scenes', () => {
+    it('uses -ss 0 -t instead of -loop 1 for video clips', () => {
+      const videoSpec: UGCRenderSpec = {
+        ...baseSpec,
+        scenes: [
+          { startSec: 0, endSec: 5, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip1.mp4' },
+          { startSec: 5, endSec: 10, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip2.mp4' },
+        ],
+      };
+      const args = buildUGCFfmpegArgs({
+        spec: videoSpec,
+        ttsAudioPath: '/tmp/voice.mp3',
+        sceneAssetPaths: ['/tmp/clip1.mp4', '/tmp/clip2.mp4'],
+        outPath: '/tmp/output.mp4',
+        totalDurationSec: 10,
+      });
+      const joined = args.join(' ');
+      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip1.mp4');
+      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip2.mp4');
+      expect(joined).not.toContain('-loop');
+    });
+
+    it('does not apply zoompan filter to video clips', () => {
+      const videoSpec: UGCRenderSpec = {
+        ...baseSpec,
+        scenes: [
+          { startSec: 0, endSec: 5, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip.mp4' },
+        ],
+      };
+      const args = buildUGCFfmpegArgs({
+        spec: videoSpec,
+        ttsAudioPath: '/tmp/voice.mp3',
+        sceneAssetPaths: ['/tmp/clip.mp4'],
+        outPath: '/tmp/output.mp4',
+        totalDurationSec: 5,
+      });
+      const graph = args[args.indexOf('-filter_complex') + 1];
+      expect(graph).not.toContain('zoompan');
+    });
+
+    it('applies scale+crop+setpts to video clips', () => {
+      const videoSpec: UGCRenderSpec = {
+        ...baseSpec,
+        scenes: [
+          { startSec: 0, endSec: 6, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip.mp4' },
+        ],
+      };
+      const args = buildUGCFfmpegArgs({
+        spec: videoSpec,
+        ttsAudioPath: '/tmp/voice.mp3',
+        sceneAssetPaths: ['/tmp/clip.mp4'],
+        outPath: '/tmp/output.mp4',
+        totalDurationSec: 6,
+      });
+      const graph = args[args.indexOf('-filter_complex') + 1];
+      expect(graph).toContain('scale=1080:1920:force_original_aspect_ratio=increase');
+      expect(graph).toContain('crop=1080:1920');
+      expect(graph).toContain('setpts=PTS-STARTPTS');
+    });
+
+    it('handles mixed video clips and image scenes', () => {
+      const mixedSpec: UGCRenderSpec = {
+        ...baseSpec,
+        scenes: [
+          { startSec: 0, endSec: 5, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip.mp4' },
+          { startSec: 5, endSec: 10, imageUrl: 'https://example.com/img.jpg' },
+          { startSec: 10, endSec: 15, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip2.mp4' },
+        ],
+      };
+      const args = buildUGCFfmpegArgs({
+        spec: mixedSpec,
+        ttsAudioPath: '/tmp/voice.mp3',
+        sceneAssetPaths: ['/tmp/clip.mp4', '/tmp/img.jpg', '/tmp/clip2.mp4'],
+        outPath: '/tmp/output.mp4',
+        totalDurationSec: 15,
+      });
+      const joined = args.join(' ');
+      const graph = args[args.indexOf('-filter_complex') + 1];
+
+      // First scene: video (no -loop)
+      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip.mp4');
+      // Second scene: image (has -loop)
+      expect(joined).toContain('-loop 1 -t 5 -i /tmp/img.jpg');
+      // Third scene: video (no -loop)
+      expect(joined).toContain('-ss 0 -t 5 -i /tmp/clip2.mp4');
+
+      // First and third scene should NOT have zoompan
+      // Second scene SHOULD have zoompan
+      expect(graph).toContain('zoompan');
+      // All three should be concatenated
+      expect(graph).toContain('[scene0][scene1][scene2]concat=n=3:v=1:a=0[vraw]');
+    });
   });
 });

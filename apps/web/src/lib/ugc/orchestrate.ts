@@ -6,12 +6,13 @@ import { chatCompletionJson } from '@/app/api/utils/ai';
 import sql from '@/app/api/utils/sql';
 import { presignDownload } from '@/app/api/utils/storage';
 import { generateImage } from '@/lib/assets/image-gen';
+import { searchVideos, pickBestFile } from '@/lib/assets/pexels-video';
 import { generatePlaceholderImage } from '@/lib/assets/placeholder-image';
 import { processProductImages } from '@/lib/assets/product-images';
 import { planScenes } from '@/lib/assets/scene-planner';
-import type { ProductAssets, ScenePlan } from '@/lib/assets/types';
+import type { ProductAssets, ScenePlan, VideoClipAsset } from '@/lib/assets/types';
 import { scriptToAudio } from '@/lib/tts/script-to-audio';
-import type { ScriptToAudioResult, SectionTiming, TTSVoice, UGCScript } from '@/lib/tts/types';
+import type { ScriptToAudioResult, SectionTiming, TTSVoice, UGCScript, UGCScriptWithQueries } from '@/lib/tts/types';
 import puppeteer from 'puppeteer';
 import { captionsFromScript } from './captions-from-script';
 import { composeUGCVideo } from './compose';
@@ -240,31 +241,53 @@ export async function scrapeProduct(url: string): Promise<ProductData> {
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Generate UGC script
+// Step 2: Generate UGC script (5 sections with Pexels search queries)
 // ---------------------------------------------------------------------------
 
 export async function generateUGCScript(
   product: ProductData,
   templateStyle?: string
-): Promise<UGCScript> {
+): Promise<UGCScriptWithQueries> {
   const stylePrompt =
     templateStyle === 'pov'
-      ? 'Use POV: format hooks. Ultra-short, punchy, relatable.'
+      ? 'Use POV: format hooks. Relatable, authentic tone.'
       : templateStyle === 'storytime'
-        ? 'Use storytime hooks. Brief, emotional, personal.'
+        ? 'Use storytime hooks. Emotional, personal, draws the viewer in.'
         : templateStyle === 'bold-hook'
           ? 'Use bold, direct claims. Numbers when possible.'
-          : 'Use authentic UGC creator style. Brief, genuine, excited.';
+          : 'Use authentic UGC creator style. Genuine, excited, like sharing with a friend.';
 
-  const script = await chatCompletionJson<UGCScript>(
+  const script = await chatCompletionJson<UGCScriptWithQueries>(
     [
       {
         role: 'system',
-        content: `You are an elite UGC video script writer specializing in 15-second TikTok Shop content. ${stylePrompt} Every word must earn its place. Scripts must be under 200 characters total.`,
+        content: `You are an elite UGC video script writer creating authentic product promotion videos. ${stylePrompt} Write natural, conversational scripts that sound like a real person talking about a product they love. Each section should flow naturally into the next.`,
       },
       {
         role: 'user',
-        content: `Write an ultra-short 15-second TikTok UGC script for this product.\n\nProduct: ${product.name}\nPrice: ${product.price}${product.originalPrice ? ` (was ${product.originalPrice})` : ''}\nRating: ${product.rating ?? 'N/A'} stars, ${product.soldCount ?? 'N/A'} sold\nKey features:\n${(product.features ?? []).slice(0, 3).map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nRules:\n- hook: max 8 words, stop-scroll opener\n- keyPoints: max 15 words, one punchy benefit statement\n- cta: max 8 words, urgent call to action\n- Total script MUST be under 200 characters\n- Sound like a real person, NOT an ad`,
+        content: `Write a UGC video script for this product. The video should be 20-35 seconds total, with each section being its natural length based on what needs to be said.
+
+Product: ${product.name}
+Price: ${product.price}${product.originalPrice ? ` (was ${product.originalPrice})` : ''}
+Rating: ${product.rating ?? 'N/A'} stars, ${product.soldCount ?? 'N/A'} sold
+Category: ${product.category ?? 'general'}
+Key features:
+${(product.features ?? []).slice(0, 5).map((f, i) => `${i + 1}. ${f}`).join('\n')}
+
+Write 5 sections:
+- hook (3-5 sec): Attention-grabbing opener that stops the scroll
+- problem (3-5 sec): Relatable problem the viewer faces
+- solution (5-8 sec): How this product solves it, key benefits
+- demo (5-8 sec): Describe what using the product looks/feels like
+- cta (3-5 sec): Urgent call to action, mention the deal
+
+Also provide a searchQueries object with a Pexels stock video search query for each section. These should describe real video footage that would match the section content (e.g., for a skincare demo: "woman applying face cream close up", for a hook about skin problems: "woman looking in mirror concerned").
+
+Rules:
+- Sound like a real person, NOT an ad
+- Be specific about the product benefits
+- Total script should be 20-35 seconds when spoken naturally
+- Search queries should be specific, visual descriptions for stock video`,
       },
     ],
     {
@@ -273,10 +296,24 @@ export async function generateUGCScript(
         type: 'object',
         properties: {
           hook: { type: 'string' },
-          keyPoints: { type: 'string' },
+          problem: { type: 'string' },
+          solution: { type: 'string' },
+          demo: { type: 'string' },
           cta: { type: 'string' },
+          searchQueries: {
+            type: 'object',
+            properties: {
+              hook: { type: 'string' },
+              problem: { type: 'string' },
+              solution: { type: 'string' },
+              demo: { type: 'string' },
+              cta: { type: 'string' },
+            },
+            required: ['hook', 'problem', 'solution', 'demo', 'cta'],
+            additionalProperties: false,
+          },
         },
-        required: ['hook', 'keyPoints', 'cta'],
+        required: ['hook', 'problem', 'solution', 'demo', 'cta', 'searchQueries'],
         additionalProperties: false,
       },
     }
@@ -305,18 +342,59 @@ export async function generateTTSAudio(
 }
 
 // ---------------------------------------------------------------------------
-// Step 4: Extract/generate visual assets
+// Step 4: Extract/generate visual assets (Pexels video clips or image fallback)
 // ---------------------------------------------------------------------------
 
 export async function gatherAssets(
   product: ProductData,
-  userId: string
+  userId: string,
+  scriptWithQueries?: UGCScriptWithQueries
 ): Promise<ProductAssets> {
   const assets: ProductAssets = {
     productImages: [],
     lifestyleImages: [],
+    videoClips: [],
   };
 
+  // If PEXELS_API_KEY is set and we have search queries, fetch video clips
+  if (!process.env.PEXELS_API_KEY) {
+    console.warn(
+      '[UGC] PEXELS_API_KEY is not set — falling back to image-based pipeline. Set the env var to enable stock video clips.'
+    );
+  }
+
+  if (process.env.PEXELS_API_KEY && scriptWithQueries?.searchQueries) {
+    const sections = ['hook', 'problem', 'solution', 'demo', 'cta'] as const;
+    for (const section of sections) {
+      const query = scriptWithQueries.searchQueries[section];
+      if (!query) continue;
+
+      try {
+        const videos = await searchVideos(query, { perPage: 3, minDuration: 3, maxDuration: 15 });
+        if (videos.length > 0) {
+          const video = videos[0];
+          const bestFile = pickBestFile(video.video_files);
+          if (bestFile) {
+            assets.videoClips!.push({
+              url: bestFile.link,
+              durationSec: video.duration,
+              searchQuery: query,
+              section,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn(`Pexels search failed for section "${section}":`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // If we got at least some video clips, return them
+    if (assets.videoClips!.length > 0) {
+      return assets;
+    }
+  }
+
+  // Fallback to image-based pipeline when Pexels is not available
   // Download and store product images from scraped URLs
   if (product.imageUrls && product.imageUrls.length > 0) {
     const processed = await processProductImages(product.imageUrls, userId);
@@ -390,14 +468,25 @@ export function buildRenderSpec(
   captionTemplate?: string
 ): UGCRenderSpec {
   // Convert scene plan into UGCScene array
-  const scenes: UGCScene[] = scenePlan.map((scene, i) => ({
-    startSec: scene.startSec,
-    endSec: scene.endSec,
-    imageUrl: scene.assetUrl || '',
-    zoomDirection: i % 2 === 0 ? 'in' : 'out',
-    overlayText: scene.overlayText,
-    overlayPosition: scene.type === 'text-overlay' ? 'center' : undefined,
-  }));
+  const scenes: UGCScene[] = scenePlan.map((scene, i) => {
+    if (scene.type === 'video-clip' && scene.videoUrl) {
+      return {
+        startSec: scene.startSec,
+        endSec: scene.endSec,
+        imageUrl: '',
+        isVideoClip: true,
+        videoUrl: scene.videoUrl,
+      };
+    }
+    return {
+      startSec: scene.startSec,
+      endSec: scene.endSec,
+      imageUrl: scene.assetUrl || '',
+      zoomDirection: (i % 2 === 0 ? 'in' : 'out') as 'in' | 'out',
+      overlayText: scene.overlayText,
+      overlayPosition: scene.type === 'text-overlay' ? 'center' : undefined,
+    };
+  });
 
   // Generate word-level captions
   const captions = captionsFromScript(script, timings);
@@ -427,7 +516,14 @@ export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<Orc
     await updateProjectStatus(projectId, 'generating_script', { product_data: product });
 
     // Step 2: Generate script
-    const script = await generateUGCScript(product, templateStyle);
+    const scriptWithQueries = await generateUGCScript(product, templateStyle);
+    const script: UGCScript = {
+      hook: scriptWithQueries.hook,
+      problem: scriptWithQueries.problem,
+      solution: scriptWithQueries.solution,
+      demo: scriptWithQueries.demo,
+      cta: scriptWithQueries.cta,
+    };
     await updateProjectStatus(projectId, 'generating_tts', { script });
 
     // Step 3: Generate TTS
@@ -439,8 +535,8 @@ export async function orchestrateUGCVideo(opts: OrchestrateOptions): Promise<Orc
       tts_timing: ttsResult,
     });
 
-    // Step 4: Gather visual assets
-    const assets = await gatherAssets(product, userId);
+    // Step 4: Gather visual assets (video clips from Pexels or image fallback)
+    const assets = await gatherAssets(product, userId, scriptWithQueries);
 
     await updateProjectStatus(projectId, 'planning_scenes', {
       video_assets: assets,

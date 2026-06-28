@@ -1,0 +1,44 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Replace the still-image UGC pipeline with a stock-video-based pipeline. This involves: (1) expanding the UGC script format to 5 sections (hook/problem/solution/demo/cta) with per-section Pexels search queries, (2) creating a Pexels Video API client module, (3) rewriting the scene planner and asset gathering to fetch video clips instead of images, (4) updating ffmpeg-compose to handle video inputs (trim+scale+crop+concat) instead of still images with zoompan, (5) updating compose.ts to download video files, (6) removing the 15-sec hard cap from TTS so scripts run their natural 20-35 sec duration, and (7) updating all related tests.",
+  "status": "completed",
+  "steps": [
+    "Step 1 - Update TTS types and script structure: In apps/web/src/lib/tts/types.ts, change UGCScript from {hook, keyPoints, cta} to {hook, problem, solution, demo, cta} where each field is the voiceover text for that section. Add a new interface UGCScriptWithQueries that extends UGCScript with a field 'searchQueries: Record<string, string>' mapping section names to Pexels search query strings.",
+    "Step 2 - Remove 15-sec hard cap from TTS: In apps/web/src/lib/tts/script-to-audio.ts, remove the MAX_DURATION_SEC=15 constant and the proportional compression logic. Update SCRIPT_SECTIONS to include the new 5 sections ['hook', 'problem', 'solution', 'demo', 'cta']. The total duration should be whatever the script naturally produces (typically 20-35 sec). Keep the estimateDuration, calculateTimings, buildFullText, and scriptToAudio functions but remove the capping logic.",
+    "Step 3 - Create Pexels video client: Create new file apps/web/src/lib/assets/pexels-video.ts. It should export: (a) searchVideos(query: string, opts?: {perPage?: number, minDuration?: number, maxDuration?: number}): Promise<PexelsVideo[]> - calls GET https://api.pexels.com/videos/search with Authorization header from process.env.PEXELS_API_KEY, returns array of video results with id, url, duration, videoFiles (array with link, width, height, quality). (b) downloadVideo(videoUrl: string, destPath: string): Promise<void> - downloads a video file to disk. (c) Interface PexelsVideo with fields: id, url, duration, image (thumbnail), videoFiles array. Pick the best file: prefer HD quality (1920x1080 or 1080x1920), fall back to largest available. Export a pickBestFile helper.",
+    "Step 4 - Create Pexels video test: Create apps/web/src/lib/assets/pexels-video.test.ts with unit tests for searchVideos (mock fetch, verify URL/headers/params), pickBestFile (picks HD, falls back), and downloadVideo (mock fetch, verify file write). Follow the same vi.mock pattern used in other test files.",
+    "Step 5 - Update asset types: In apps/web/src/lib/assets/types.ts, add a new interface VideoClipAsset {url: string; localPath?: string; durationSec: number; searchQuery: string; section: string}. Update ProductAssets to add a field 'videoClips: VideoClipAsset[]' (optional, for backward compat). Update ScenePlan to add type option 'video-clip' and add optional field 'videoUrl?: string'.",
+    "Step 6 - Update UGC types: In apps/web/src/lib/ugc/types.ts, update UGCScene to support video clips: add optional field 'videoUrl?: string' (when present, this scene uses a video clip instead of a still image). Add optional field 'isVideoClip?: boolean'. The imageUrl field stays for backward compat but can be empty string when using video clips.",
+    "Step 7 - Rewrite generateUGCScript in orchestrate.ts: Change the GPT prompt to generate a 5-section script (hook 3-5 sec, problem 3-5 sec, solution 5-8 sec, demo 5-8 sec, cta 3-5 sec) totaling 20-35 seconds. The GPT call should also generate searchQueries (one per section) for finding relevant Pexels stock video (e.g., for a skincare product demo section: 'woman applying face cream close up'). Update the JSON schema to match UGCScriptWithQueries. Remove the 200-char limit and 15-sec constraints. The system prompt should instruct natural, conversational UGC script with proper duration.",
+    "Step 8 - Rewrite gatherAssets in orchestrate.ts: Instead of generating/downloading images, call searchVideos from the new Pexels module for each section's search query. For each section, search Pexels, pick the top result, and store it in the VideoClipAsset array. Keep a fallback: if PEXELS_API_KEY is not set, fall back to the existing image-based pipeline. Return the video clips in ProductAssets.videoClips.",
+    "Step 9 - Rewrite scene planner: In apps/web/src/lib/assets/scene-planner.ts, add logic to handle video clips. When assets.videoClips is populated, create scenes of type 'video-clip' with videoUrl pointing to the clip. Each scene's timing should match the TTS section timing. The planner should map each script section to its corresponding video clip by matching the section field.",
+    "Step 10 - Update buildRenderSpec in orchestrate.ts: When scenes are video clips (type='video-clip'), set isVideoClip=true and videoUrl on the UGCScene instead of imageUrl. Also update captionsFromScript call to use the new 5-section script format.",
+    "Step 11 - Update captions-from-script.ts: Change SCRIPT_SECTIONS from ['hook', 'keyPoints', 'cta'] to ['hook', 'problem', 'solution', 'demo', 'cta'] to match the new script structure.",
+    "Step 12 - Rewrite ffmpeg-compose.ts for video inputs: Add a new code path in buildUGCFfmpegArgs that handles video clip scenes (isVideoClip=true). Instead of '-loop 1 -t {duration} -i scene.jpg' with zoompan, use '-ss 0 -t {duration} -i clip.mp4' and apply 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=PTS-STARTPTS' (no zoompan). Keep the existing image path for backward compat (scenes without isVideoClip). The concat filter remains the same.",
+    "Step 13 - Update compose.ts for video downloads: In the scene download loop, detect if a scene has videoUrl (isVideoClip=true). If so, download the video file (e.g., scene_0.mp4) instead of an image. Pass the correct paths to buildUGCFfmpegArgs. Rename the parameter from sceneImagePaths to sceneAssetPaths (or keep it but document it handles both).",
+    "Step 14 - Update tests: (a) Update apps/web/src/lib/tts/script-to-audio test (generate.test.ts colocated) to use 5-section scripts and verify no duration capping. (b) Update scene-planner.test.ts to test the video-clip path. (c) Update ffmpeg-compose.test.ts to test video inputs (no zoompan, no -loop). (d) Update orchestrate.test.ts mocks to use the new 5-section script structure and video clips. (e) Update captions-from-script.test.ts for 5 sections. (f) Update compose.test.ts if needed.",
+    "Step 15 - Final type alignment: Run 'yarn workspace web typecheck' to identify any remaining type errors from the refactor and fix them. Ensure all imports are correct and interfaces align across modules."
+  ],
+  "acceptance_criteria": [
+    "UGCScript interface has 5 fields: hook, problem, solution, demo, cta",
+    "UGCScriptWithQueries adds searchQueries mapping sections to Pexels search strings",
+    "script-to-audio.ts has no MAX_DURATION_SEC cap - scripts can be 20-35+ seconds naturally",
+    "SCRIPT_SECTIONS in script-to-audio.ts and captions-from-script.ts lists all 5 sections",
+    "pexels-video.ts exports searchVideos, downloadVideo, pickBestFile with proper types",
+    "pexels-video.test.ts has tests for search, download, and file picking",
+    "ffmpeg-compose.ts handles video clip inputs without zoompan (just scale+crop+concat)",
+    "compose.ts downloads video files for video-clip scenes",
+    "orchestrate.ts generateUGCScript produces 5-section scripts with search queries",
+    "orchestrate.ts gatherAssets fetches Pexels videos when PEXELS_API_KEY is available",
+    "scene-planner.ts maps video clips to scenes by section",
+    "yarn workspace web typecheck passes with zero errors",
+    "yarn workspace web test passes for all new and modified tests (pre-existing billing failures excluded)"
+  ],
+  "verification": [
+    "Run 'yarn workspace web typecheck' and confirm zero errors",
+    "Run 'yarn workspace web test' and confirm all UGC/TTS/assets tests pass (pre-existing billing test failures are known and acceptable)"
+  ],
+  "blocked_reason": null,
+  "findings": "All implementation completed and verified. Typecheck passes with zero errors. All new/modified tests pass (187 passing). Only pre-existing billing/plans.test.ts failures (2) remain which are documented as acceptable. The pexels-video downloadVideo test uses real fs writes to a temp dir (vitest cannot mock node: builtins effectively in this project). The ffmpeg-compose parameter was renamed from sceneImagePaths to sceneAssetPaths to reflect dual image/video support."
+}

@@ -153,29 +153,39 @@ describe('estimateDuration', () => {
 describe('calculateTimings', () => {
   const mockScript: UGCScript = {
     hook: 'A'.repeat(17), // 1 second
-    keyPoints: 'B'.repeat(34), // 2 seconds
-    cta: 'C'.repeat(17), // 1 second
+    problem: 'B'.repeat(34), // 2 seconds
+    solution: 'C'.repeat(51), // 3 seconds
+    demo: 'D'.repeat(34), // 2 seconds
+    cta: 'E'.repeat(17), // 1 second
   };
 
   it('calculates correct start/end times for each section', () => {
     const timings = calculateTimings(mockScript, 1.0);
 
-    expect(timings).toHaveLength(3);
+    expect(timings).toHaveLength(5);
 
     // hook: 0 -> 1
     expect(timings[0]).toEqual({ section: 'hook', startSec: 0, endSec: 1 });
 
-    // keyPoints: 1 + 0.3 pause = 1.3 -> 3.3
-    expect(timings[1]).toEqual({ section: 'keyPoints', startSec: 1.3, endSec: 3.3 });
+    // problem: 1 + 0.3 pause = 1.3 -> 3.3
+    expect(timings[1]).toEqual({ section: 'problem', startSec: 1.3, endSec: 3.3 });
 
-    // cta: 3.3 + 0.3 = 3.6 -> 4.6
-    expect(timings[2]).toEqual({ section: 'cta', startSec: 3.6, endSec: 4.6 });
+    // solution: 3.3 + 0.3 = 3.6 -> 6.6
+    expect(timings[2]).toEqual({ section: 'solution', startSec: 3.6, endSec: 6.6 });
+
+    // demo: 6.6 + 0.3 = 6.9 -> 8.9
+    expect(timings[3]).toEqual({ section: 'demo', startSec: 6.9, endSec: 8.9 });
+
+    // cta: 8.9 + 0.3 = 9.2 -> 10.2
+    expect(timings[4]).toEqual({ section: 'cta', startSec: 9.2, endSec: 10.2 });
   });
 
   it('skips empty sections', () => {
     const partial: UGCScript = {
       hook: 'A'.repeat(17),
-      keyPoints: '',
+      problem: '',
+      solution: '',
+      demo: '',
       cta: 'C'.repeat(17),
     };
 
@@ -196,21 +206,26 @@ describe('calculateTimings', () => {
   it('returns empty array for all-empty script', () => {
     const empty: UGCScript = {
       hook: '',
-      keyPoints: '',
+      problem: '',
+      solution: '',
+      demo: '',
       cta: '',
     };
     expect(calculateTimings(empty)).toEqual([]);
   });
 
-  it('clamps total duration to 15 seconds when exceeded', () => {
+  it('does not clamp duration - scripts run their natural length', () => {
     const longScript: UGCScript = {
       hook: 'A'.repeat(85), // 5 seconds
-      keyPoints: 'B'.repeat(119), // 7 seconds
-      cta: 'C'.repeat(85), // 5 seconds
+      problem: 'B'.repeat(85), // 5 seconds
+      solution: 'C'.repeat(119), // 7 seconds
+      demo: 'D'.repeat(119), // 7 seconds
+      cta: 'E'.repeat(85), // 5 seconds
     };
-    // Total would be 5 + 0.3 + 7 + 0.3 + 5 = 17.6s, exceeds 15s
+    // Total would be 5 + 0.3 + 5 + 0.3 + 7 + 0.3 + 7 + 0.3 + 5 = 30.2s
     const timings = calculateTimings(longScript, 1.0);
-    expect(timings[timings.length - 1].endSec).toBeLessThanOrEqual(15);
+    // No capping - should exceed 15s
+    expect(timings[timings.length - 1].endSec).toBeGreaterThan(15);
   });
 });
 
@@ -218,7 +233,9 @@ describe('estimateTotalDuration', () => {
   it('returns 0 for empty script', () => {
     const empty: UGCScript = {
       hook: '',
-      keyPoints: '',
+      problem: '',
+      solution: '',
+      demo: '',
       cta: '',
     };
     expect(estimateTotalDuration(empty)).toBe(0);
@@ -227,7 +244,9 @@ describe('estimateTotalDuration', () => {
   it('returns correct total with pauses', () => {
     const script: UGCScript = {
       hook: 'A'.repeat(17), // 1s
-      keyPoints: 'B'.repeat(17), // 1s
+      problem: 'B'.repeat(17), // 1s
+      solution: '',
+      demo: '',
       cta: '',
     };
     // 1s + 0.3s pause + 1s = 2.3s
@@ -239,7 +258,9 @@ describe('buildFullText', () => {
   it('concatenates non-empty sections with pause markers', () => {
     const script: UGCScript = {
       hook: 'Stop scrolling!',
-      keyPoints: 'This serum hydrates instantly.',
+      problem: 'Dry skin is terrible.',
+      solution: 'This serum hydrates instantly.',
+      demo: 'Just two drops a day.',
       cta: 'Buy now!',
     };
 
@@ -247,14 +268,16 @@ describe('buildFullText', () => {
     expect(result).toContain('Stop scrolling!');
     expect(result).toContain('Buy now!');
     expect(result).toContain('\n\n...\n\n');
-    // 3 sections = 2 separators
-    expect(result.split('\n\n...\n\n')).toHaveLength(3);
+    // 5 sections = 4 separators
+    expect(result.split('\n\n...\n\n')).toHaveLength(5);
   });
 
   it('skips empty sections', () => {
     const script: UGCScript = {
       hook: 'Hello',
-      keyPoints: '',
+      problem: '',
+      solution: '',
+      demo: '',
       cta: 'World',
     };
 
@@ -265,7 +288,9 @@ describe('buildFullText', () => {
   it('returns empty string for all-empty script', () => {
     const script: UGCScript = {
       hook: '',
-      keyPoints: '',
+      problem: '',
+      solution: '',
+      demo: '',
       cta: '',
     };
     expect(buildFullText(script)).toBe('');

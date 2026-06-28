@@ -1,0 +1,26 @@
+{
+  "task_id": "task-pexels-stock-video-ugc",
+  "task_description": "Replace the still-image-with-zoompan UGC pipeline with a real stock video pipeline using Pexels Video API. Expand script to 5 natural sections (hook/problem/solution/demo/cta) at 20-35 seconds duration, fetch actual video clips from Pexels, and stitch them with voiceover using ffmpeg video-concat instead of image-zoompan.",
+  "status": "completed",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "Typecheck passes with 0 errors. 187 tests pass, only 2 pre-existing billing test failures remain. All UGC/TTS/assets/pexels tests pass. 12 new Pexels video tests, expanded orchestrate tests (25), scene-planner tests (18), ffmpeg-compose tests (22), captions tests (10)."
+  },
+  "review_fixes": {
+    "applied": [
+      "UI script display regression: aligned page.tsx UGCJob.script and SCRIPT_SECTIONS to 5-section format (hook/problem/solution/demo/cta)",
+      "pickBestFile mutates input: used [...candidates].sort() instead of candidates.sort()",
+      "Silent fallback to image pipeline: added console.warn when PEXELS_API_KEY is missing"
+    ],
+    "deferred": [
+      "Rate-limit retry on Pexels API (issue #4): noted as future improvement, not critical for initial launch",
+      "Clip offset limitation (issue #5): future improvement to allow trimming from non-zero offset",
+      "Puppeteer as production dependency (issue #2): already addressed in separate task-puppeteer-scraping task"
+    ]
+  }
+}

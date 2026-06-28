@@ -1,14 +1,16 @@
-// Builds FFmpeg arguments for UGC video composition from still images.
+// Builds FFmpeg arguments for UGC video composition.
+//
+// Supports two scene types:
+// 1. Still images with Ken Burns effect (zoompan) - legacy path
+// 2. Video clips with scale+crop (no zoompan) - stock video path
 //
 // Approach:
 // 1. TTS audio is the primary timeline driver (its duration = video duration)
-// 2. Each scene is a still image with Ken Burns effect (zoompan filter)
-// 3. Scenes are composed via a complex filtergraph that concatenates
-//    individual zoompan streams
+// 2. Each scene is either a video clip or a still image with Ken Burns
+// 3. Scenes are composed via a complex filtergraph that concatenates streams
 // 4. Captions are burned via the ASS subtitle filter
-// 5. Text overlays are drawn via the drawtext filter
-// 6. Background music is mixed under the voiceover at low volume
-// 7. Output: H.264 MP4 with AAC audio, same quality as existing pipeline
+// 5. Background music is mixed under the voiceover at low volume
+// 6. Output: H.264 MP4 with AAC audio, same quality as existing pipeline
 
 import { ASPECT_DIMENSIONS } from '@/lib/render/types';
 import type { UGCRenderSpec, UGCScene, ZoomDirection } from './types';
@@ -17,8 +19,8 @@ export interface BuildUGCFfmpegArgsInput {
   spec: UGCRenderSpec;
   /** Path to the TTS audio file on disk. */
   ttsAudioPath: string;
-  /** Paths to scene image files on disk (same order as spec.scenes). */
-  sceneImagePaths: string[];
+  /** Paths to scene asset files on disk (same order as spec.scenes). Images or videos. */
+  sceneAssetPaths: string[];
   /** Path to the background music file on disk (if any). */
   musicPath?: string;
   /** Path to the generated ASS subtitle file (if any). */
@@ -108,14 +110,15 @@ function escapeFilterPath(p: string): string {
  * Build FFmpeg arguments for a complete UGC video composition.
  *
  * The filtergraph structure:
- * - Each image input gets: scale to output size, zoompan, setpts, optional drawtext
+ * - Video clip scenes: trim, scale+crop, setpts (no zoompan)
+ * - Image scenes: scale to output size, zoompan, setpts, optional drawtext
  * - All video streams are concatenated
  * - TTS audio is the primary audio
  * - Optional music is mixed under the voiceover
  * - ASS captions are burned on top
  */
 export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
-  const { spec, ttsAudioPath, sceneImagePaths, musicPath, assPath, outPath, totalDurationSec } =
+  const { spec, ttsAudioPath, sceneAssetPaths, musicPath, assPath, outPath, totalDurationSec } =
     input;
   const [width, height] = ASPECT_DIMENSIONS[spec.aspect];
   const fps = spec.fps ?? 30;
@@ -123,11 +126,17 @@ export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
   const args: string[] = ['-y', '-hide_banner', '-loglevel', 'error', '-progress', 'pipe:1'];
 
   // --- Inputs ---
-  // Input images: each looped for its scene duration
   for (let i = 0; i < spec.scenes.length; i++) {
     const scene = spec.scenes[i];
     const duration = scene.endSec - scene.startSec;
-    args.push('-loop', '1', '-t', String(duration), '-i', sceneImagePaths[i]);
+
+    if (scene.isVideoClip) {
+      // Video clip input: trim to the scene duration
+      args.push('-ss', '0', '-t', String(duration), '-i', sceneAssetPaths[i]);
+    } else {
+      // Still image input: loop for its scene duration
+      args.push('-loop', '1', '-t', String(duration), '-i', sceneAssetPaths[i]);
+    }
   }
 
   // TTS audio input (index = scenes.length)
@@ -144,20 +153,29 @@ export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
   // --- Filtergraph ---
   const filterParts: string[] = [];
 
-  // Process each scene: scale + zoompan + optional drawtext
+  // Process each scene
   for (let i = 0; i < spec.scenes.length; i++) {
     const scene = spec.scenes[i];
     const duration = scene.endSec - scene.startSec;
     const durationFrames = Math.ceil(duration * fps);
 
-    const zoompanDir = scene.zoomDirection ?? 'in';
-    const zoompanFilter = buildZoompanFilter(zoompanDir, durationFrames, width, height);
+    let sceneFilters: string;
 
-    let sceneFilters = `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${zoompanFilter},setpts=PTS-STARTPTS`;
+    if (scene.isVideoClip) {
+      // Video clip: scale + crop (no zoompan, no loop)
+      sceneFilters = `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setpts=PTS-STARTPTS[scene${i}]`;
+    } else {
+      // Still image: scale + zoompan
+      const zoompanDir = scene.zoomDirection ?? 'in';
+      const zoompanFilter = buildZoompanFilter(zoompanDir, durationFrames, width, height);
 
-    // Text overlays disabled — clean video without on-screen text
+      sceneFilters = `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${zoompanFilter},setpts=PTS-STARTPTS`;
 
-    sceneFilters += `[scene${i}]`;
+      // Text overlays disabled - clean video without on-screen text
+
+      sceneFilters += `[scene${i}]`;
+    }
+
     filterParts.push(sceneFilters);
   }
 
@@ -167,7 +185,6 @@ export function buildUGCFfmpegArgs(input: BuildUGCFfmpegArgsInput): string[] {
 
   // Burn ASS captions if provided
   if (assPath) {
-    // Use the subtitles filter which handles paths more reliably across platforms
     filterParts.push(`[vraw]subtitles=filename=${escapeFilterPath(assPath)}[v]`);
   } else {
     filterParts.push(`[vraw]null[v]`);

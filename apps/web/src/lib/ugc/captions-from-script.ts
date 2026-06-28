@@ -8,7 +8,9 @@ import type { SectionTiming, UGCScript } from '@/lib/tts/types';
 /** Ordered sections matching TTS concatenation order. */
 const SCRIPT_SECTIONS: (keyof UGCScript)[] = [
   'hook',
-  'keyPoints',
+  'problem',
+  'solution',
+  'demo',
   'cta',
 ];
 
