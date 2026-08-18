@@ -5,6 +5,7 @@ import { checkPlanQuota, quotaExceeded } from '@/app/api/utils/quota';
 import { analyzeTranscript } from '@/lib/clip/analyze';
 import { TimedWord } from '@/lib/clip/boundaries';
 import { wordsFromSegments } from '@/lib/clip/transcript';
+import { FightAnalysisContext } from '@/lib/clip/fight';
 
 interface InputSegment {
   id: string;
@@ -59,11 +60,13 @@ export async function POST(request: Request) {
       count = 5,
       segments = [],
       words = [],
+      context = {},
     } = body as {
       transcript: string;
       count?: number;
       segments?: InputSegment[];
       words?: TimedWord[];
+      context?: FightAnalysisContext;
     };
 
     // Preferred path: full-transcript, word-accurate analysis over the WHOLE
@@ -80,7 +83,7 @@ export async function POST(request: Request) {
           : [];
 
     if (timedWords.length > 0) {
-      const candidates = await analyzeTranscript({ count, words: timedWords });
+      const candidates = await analyzeTranscript({ count, words: timedWords, context });
       const clips = candidates.map((c, i) => ({
         id: `clip-${i}`,
         title: c.title,
@@ -89,6 +92,11 @@ export async function POST(request: Request) {
         platforms: c.platforms,
         reason: c.reason,
         keywords: c.keywords,
+        momentType: c.momentType,
+        round: c.round,
+        fighterNames: c.fighterNames,
+        sponsorFriendly: c.sponsorFriendly,
+        contentMode: c.contentMode,
         start: c.start,
         end: c.end,
         duration: durationLabel(c.start, c.end),

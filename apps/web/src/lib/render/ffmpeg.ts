@@ -71,6 +71,10 @@ export function buildFfmpegArgs(input: BuildArgsInput): string[] {
   if (spec.music) {
     args.push('-stream_loop', '-1', '-i', spec.music.url);
   }
+  const sponsorInputIndex = spec.sponsor?.logoUrl ? (spec.music ? 2 : 1) : null;
+  if (spec.sponsor?.logoUrl) {
+    args.push('-loop', '1', '-i', spec.sponsor.logoUrl);
+  }
 
   const videoFilters: string[] = [];
   const audioFilters: string[] = [];
@@ -85,36 +89,63 @@ export function buildFfmpegArgs(input: BuildArgsInput): string[] {
   // horizontal reframe (cropKeyframes) and zoom punch-ins (zoomKeyframes).
   const zoomExpr =
     spec.zoomKeyframes && spec.zoomKeyframes.length > 0
-      ? piecewiseLinearExpr(spec.zoomKeyframes.map((k) => ({ t: k.t, v: k.scale })), 1)
+      ? piecewiseLinearExpr(
+          spec.zoomKeyframes.map((k) => ({ t: k.t, v: k.scale })),
+          1
+        )
       : '1';
   const xCenterExpr =
     spec.cropKeyframes && spec.cropKeyframes.length > 0
-      ? piecewiseLinearExpr(spec.cropKeyframes.map((k) => ({ t: k.t, v: k.x })), 0.5)
+      ? piecewiseLinearExpr(
+          spec.cropKeyframes.map((k) => ({ t: k.t, v: k.x })),
+          0.5
+        )
       : '0.5';
 
   const cropW = `min(iw\\,ih*${targetRatio})/(${zoomExpr})`;
   const cropH = `min(ih\\,iw/${targetRatio})/(${zoomExpr})`;
-  videoFilters.push(
-    `crop=w='${cropW}':h='${cropH}':x='(iw-ow)*(${xCenterExpr})':y='(ih-oh)/2'`
-  );
+  videoFilters.push(`crop=w='${cropW}':h='${cropH}':x='(iw-ow)*(${xCenterExpr})':y='(ih-oh)/2'`);
   videoFilters.push(`scale=${width}:${height}`, 'setsar=1', `fps=${fps}`);
 
   if (assPath) {
     videoFilters.push(`ass='${escapeFilterPath(assPath)}'`);
   }
 
-  if (spec.loudnessNormalize !== false) {
+  if (spec.sourceHasAudio !== false && spec.loudnessNormalize !== false) {
     audioFilters.push('loudnorm=I=-14:TP=-1.5:LRA=11');
   }
 
   const filterParts: string[] = [];
-  filterParts.push(`[0:v]${videoFilters.join(',')}[v]`);
+  if (sponsorInputIndex !== null && spec.sponsor) {
+    const safeArea = (spec.sponsor.safeAreaPercent ?? 8) / 100;
+    const marginX = Math.round(width * safeArea);
+    const marginY = Math.round(height * safeArea);
+    const maxLogoW = Math.round(width * 0.22);
+    const opacity = Math.min(1, Math.max(0.25, spec.sponsor.opacity ?? 0.9));
+    const placement = spec.sponsor.placement ?? 'top-right';
+    const x = placement.endsWith('right') ? `W-w-${marginX}` : String(marginX);
+    const y = placement.startsWith('bottom') ? `H-h-${marginY}` : String(marginY);
+    filterParts.push(`[0:v]${videoFilters.join(',')}[basev]`);
+    filterParts.push(
+      `[${sponsorInputIndex}:v]scale=${maxLogoW}:-1:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${opacity}[sponsorlogo]`
+    );
+    filterParts.push(`[basev][sponsorlogo]overlay=x=${x}:y=${y}:shortest=1[v]`);
+  } else {
+    filterParts.push(`[0:v]${videoFilters.join(',')}[v]`);
+  }
 
-  if (spec.music) {
+  if (spec.music && spec.sourceHasAudio !== false) {
     const musicVol = Math.min(Math.max(spec.music.volume, 0), 1);
     filterParts.push(`[0:a]${audioFilters.join(',') || 'anull'}[voice]`);
     filterParts.push(`[1:a]volume=${musicVol}[bed]`);
     filterParts.push(`[voice][bed]amix=inputs=2:duration=first:normalize=0[a]`);
+  } else if (spec.music) {
+    const musicVol = Math.min(Math.max(spec.music.volume, 0), 1);
+    filterParts.push(`[1:a]volume=${musicVol},atrim=duration=${input.outputDurationSec}[a]`);
+  } else if (spec.sourceHasAudio === false) {
+    filterParts.push(
+      `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${input.outputDurationSec}[a]`
+    );
   } else {
     filterParts.push(`[0:a]${audioFilters.join(',') || 'anull'}[a]`);
   }
@@ -125,13 +156,20 @@ export function buildFfmpegArgs(input: BuildArgsInput): string[] {
   // window/cuts, and amix=duration=first caps the looped music bed to the
   // voice length. (-shortest + loudnorm + amix interact badly and truncate.)
   args.push(
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '19',
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac',
-    '-b:a', '192k',
-    '-movflags', '+faststart',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'veryfast',
+    '-crf',
+    '19',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-movflags',
+    '+faststart',
     outPath
   );
 

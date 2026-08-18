@@ -4,6 +4,7 @@
 import sql from '@/app/api/utils/sql';
 import { groupWordsIntoLines } from '@/lib/captions/ass';
 import { translateLines, translatedLinesToWords } from '@/lib/captions/translate';
+import { sanitizeSponsorPackage, SponsorPackage } from '@/lib/clip/fight';
 import { presignDownload, storageConfigured } from '@/app/api/utils/storage';
 import { AspectRatio, CutRange, RenderSpec, SpecWord } from './types';
 
@@ -18,6 +19,7 @@ export interface RenderRequestOptions {
   music?: { url: string; volume: number } | null;
   zoomKeyframes?: Array<{ t: number; scale: number }>;
   cropKeyframes?: Array<{ t: number; x: number }>;
+  sponsor?: SponsorPackage | null;
 }
 
 interface ProjectRow {
@@ -145,6 +147,7 @@ export async function buildRenderSpec(
     cropKeyframes: opts.cropKeyframes,
     zoomKeyframes: opts.zoomKeyframes,
     music: opts.music ?? null,
+    sponsor: opts.sponsor ? sanitizeSponsorPackage(opts.sponsor) : null,
     loudnessNormalize: true,
   };
 

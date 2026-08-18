@@ -35,8 +35,20 @@ export interface SpeedRange {
   rate: number;
 }
 
+export interface SponsorOverlay {
+  sponsorName: string;
+  logoUrl?: string;
+  placement?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  opacity?: number;
+  safeAreaPercent?: number;
+  accentColor?: string;
+  callToAction?: string;
+}
+
 export interface RenderSpec {
   sourceUrl: string;
+  // False for footage with no audio stream; defaults to true for backward compatibility.
+  sourceHasAudio?: boolean;
   startSec: number;
   endSec: number;
   aspect: AspectRatio;
@@ -51,6 +63,7 @@ export interface RenderSpec {
   zoomKeyframes?: ZoomKeyframe[];
   speedRanges?: SpeedRange[];
   music?: { url: string; volume: number } | null;
+  sponsor?: SponsorOverlay | null;
   loudnessNormalize?: boolean;
 }
 

@@ -87,4 +87,68 @@ describe('buildFfmpegArgs', () => {
     expect(graph).toContain('volume=0.3[bed]');
     expect(graph).toContain('amix=inputs=2:duration=first:normalize=0');
   });
+
+  it('adds a sponsor logo inside the vertical safe area', () => {
+    const args = buildFfmpegArgs({
+      spec: {
+        ...baseSpec,
+        sponsor: {
+          sponsorName: 'ACME Fight Gear',
+          logoUrl: 'https://cdn.example.com/acme.png',
+          placement: 'top-right',
+          opacity: 0.85,
+          safeAreaPercent: 8,
+          accentColor: '#FFCC00',
+          callToAction: 'Shop ACME',
+        },
+      },
+      trimmedCuts: [],
+      outputDurationSec: 60,
+      assPath: null,
+      outPath: '/tmp/out.mp4',
+    });
+
+    expect(args.join(' ')).toContain('-i https://cdn.example.com/acme.png');
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('overlay=x=W-w-86:y=154');
+    expect(graph).toContain('colorchannelmixer=aa=0.85');
+  });
+
+  it('adds bounded silence for fight footage without an audio stream', () => {
+    const args = buildFfmpegArgs({
+      spec: { ...baseSpec, sourceHasAudio: false },
+      trimmedCuts: [],
+      outputDurationSec: 60,
+      assPath: null,
+      outPath: '/tmp/out.mp4',
+    });
+
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('anullsrc=channel_layout=stereo:sample_rate=48000');
+    expect(graph).toContain('atrim=duration=60[a]');
+    expect(graph).not.toContain('[0:a]');
+  });
+
+  it('keeps existing source and music input indexes when sponsor branding is added', () => {
+    const args = buildFfmpegArgs({
+      spec: {
+        ...baseSpec,
+        music: { url: 'https://example.com/track.mp3', volume: 0.2 },
+        sponsor: {
+          sponsorName: 'ACME',
+          logoUrl: 'https://cdn.example.com/acme.png',
+          placement: 'bottom-left',
+          opacity: 1,
+          safeAreaPercent: 8,
+        },
+      },
+      trimmedCuts: [],
+      outputDurationSec: 60,
+      assPath: null,
+      outPath: '/tmp/out.mp4',
+    });
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('[1:a]volume=0.2[bed]');
+    expect(graph).toContain('[2:v]');
+  });
 });

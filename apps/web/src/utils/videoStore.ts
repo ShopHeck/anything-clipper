@@ -22,6 +22,12 @@ export interface ViralClip {
   platforms: string[];
   reason: string;
   thumbnail?: string;
+  keywords?: string[];
+  momentType?: string;
+  round?: number;
+  fighterNames?: string[];
+  sponsorFriendly?: boolean;
+  contentMode?: 'generic' | 'fight' | 'sponsor';
 }
 
 interface VideoStore {
