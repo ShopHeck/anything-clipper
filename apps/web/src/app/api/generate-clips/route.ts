@@ -2,18 +2,10 @@ import { aiErrorResponse, chatCompletionJson } from '@/app/api/utils/ai';
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
 import { checkPlanQuota, quotaExceeded } from '@/app/api/utils/quota';
+import { parseGenerateClipsInput, validationResponse } from '@/lib/api/input-validation';
 import { analyzeTranscript } from '@/lib/clip/analyze';
 import { TimedWord } from '@/lib/clip/boundaries';
 import { wordsFromSegments } from '@/lib/clip/transcript';
-import { FightAnalysisContext } from '@/lib/clip/fight';
-
-interface InputSegment {
-  id: string;
-  start: number;
-  end: number;
-  text?: string;
-  viralScore?: number;
-}
 interface RawClip {
   title: string;
   hook: string;
@@ -54,20 +46,9 @@ export async function POST(request: Request) {
   if (!limit.ok) return rateLimited(limit);
 
   try {
-    const body = await request.json();
-    const {
-      transcript,
-      count = 5,
-      segments = [],
-      words = [],
-      context = {},
-    } = body as {
-      transcript: string;
-      count?: number;
-      segments?: InputSegment[];
-      words?: TimedWord[];
-      context?: FightAnalysisContext;
-    };
+    const { transcript, count, segments, words, context } = parseGenerateClipsInput(
+      await request.json()
+    );
 
     // Preferred path: full-transcript, word-accurate analysis over the WHOLE
     // video. Use provided word timestamps, else synthesize from segments.
@@ -178,6 +159,6 @@ export async function POST(request: Request) {
 
     return Response.json({ clips });
   } catch (error) {
-    return aiErrorResponse(error);
+    return validationResponse(error) ?? aiErrorResponse(error);
   }
 }

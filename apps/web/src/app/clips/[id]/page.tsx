@@ -38,6 +38,8 @@ interface ClipItem {
   thumbnail: string;
   hook: string;
   tags: string[];
+  momentType?: string;
+  round?: number;
 }
 
 const mockClips: ClipItem[] = [
@@ -701,6 +703,8 @@ export default function ClipsPage({ params }: { params: Promise<{ id: string }> 
             thumbnail: c.thumbnail || 'from-violet-800 to-purple-900',
             hook: c.hook,
             tags: [],
+            momentType: c.momentType,
+            round: c.round,
           }))
         );
       }
@@ -724,22 +728,25 @@ export default function ClipsPage({ params }: { params: Promise<{ id: string }> 
                     hook: string;
                     score: number;
                     platforms: string[];
-                    start_time: number;
-                    end_time: number;
-                    duration_label: string;
-                    thumbnail: string;
-                    reason: string;
+                    start: number;
+                    end: number;
+                    duration: string;
+                    thumbnail?: string;
+                    momentType?: string;
+                    round?: number;
                   }) => ({
                     id: c.id,
                     title: c.title,
-                    start: c.start_time,
-                    end: c.end_time,
-                    duration: c.duration_label,
+                    start: c.start,
+                    end: c.end,
+                    duration: c.duration,
                     score: c.score,
                     platforms: c.platforms || [],
                     thumbnail: c.thumbnail || 'from-violet-800 to-purple-900',
                     hook: c.hook,
                     tags: [],
+                    momentType: c.momentType,
+                    round: c.round,
                   })
                 )
               );

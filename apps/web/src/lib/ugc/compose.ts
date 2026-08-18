@@ -17,7 +17,9 @@ import { createSolidPNG } from '@/lib/assets/placeholder-image';
 import { buildUGCFfmpegArgs } from './ffmpeg-compose';
 import type { UGCRenderSpec } from './types';
 
-const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
+function ffmpegBinary(): string {
+  return process.env.FFMPEG_PATH || 'ffmpeg';
+}
 
 export interface UGCComposeResult {
   status: 'completed' | 'failed';
@@ -63,7 +65,7 @@ function runFfmpeg(
   onProgress?: (pct: number) => void
 ): Promise<{ ok: boolean; stderrTail: string }> {
   return new Promise((resolve) => {
-    const proc = spawn(FFMPEG, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(ffmpegBinary(), args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderrTail = '';
 
     proc.stdout.on('data', (chunk: Buffer) => {
@@ -151,9 +153,7 @@ export async function composeUGCVideo(opts: ComposeOptions): Promise<UGCComposeR
 
     // Calculate total duration from TTS audio (sum of scenes as fallback)
     const totalDurationSec =
-      spec.scenes.length > 0
-        ? spec.scenes[spec.scenes.length - 1].endSec
-        : 0;
+      spec.scenes.length > 0 ? spec.scenes[spec.scenes.length - 1].endSec : 0;
 
     if (totalDurationSec < 0.5) {
       throw new Error('Video duration too short - check TTS audio and scene timing.');

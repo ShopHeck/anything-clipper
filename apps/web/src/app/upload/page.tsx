@@ -298,6 +298,12 @@ export default function UploadPage() {
         if (!clipsRes.ok) throw new Error('Clip generation failed');
         const clipsData = await clipsRes.json();
         videoStore.setClips(clipsData.clips || []);
+        videoStore.setContentMode(contentMode);
+        videoStore.setSponsorPackage(
+          contentMode === 'sponsor' && sponsorName.trim()
+            ? { sponsorName: sponsorName.trim() }
+            : null
+        );
         await analysisProgressPromise;
 
         // ── Stage 4: Save project to database ───────────────
@@ -338,6 +344,18 @@ export default function UploadPage() {
                 ),
                 segments: segs.map((s, i) => ({ ...s, sortOrder: i })),
                 clips: clipsData.clips || [],
+                content_mode: contentMode,
+                fight_context: {
+                  mode: contentMode,
+                  fighterNames: [fighterOne, fighterTwo]
+                    .map((value) => value.trim())
+                    .filter(Boolean),
+                  eventName: eventName.trim() || undefined,
+                },
+                sponsor_package:
+                  contentMode === 'sponsor' && sponsorName.trim()
+                    ? { sponsorName: sponsorName.trim() }
+                    : null,
               }),
             });
           }

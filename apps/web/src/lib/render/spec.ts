@@ -6,6 +6,7 @@ import { groupWordsIntoLines } from '@/lib/captions/ass';
 import { translateLines, translatedLinesToWords } from '@/lib/captions/translate';
 import { sanitizeSponsorPackage, SponsorPackage } from '@/lib/clip/fight';
 import { presignDownload, storageConfigured } from '@/app/api/utils/storage';
+import { resolveSponsorLogoUrl } from './sponsor';
 import { AspectRatio, CutRange, RenderSpec, SpecWord } from './types';
 
 export interface RenderRequestOptions {
@@ -130,6 +131,18 @@ export async function buildRenderSpec(
     }
   }
 
+  let sponsor = null;
+  if (opts.sponsor) {
+    try {
+      sponsor = resolveSponsorOverlay(userId, opts.sponsor);
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Invalid sponsor package',
+        status: 400,
+      };
+    }
+  }
+
   const spec: RenderSpec = {
     sourceUrl,
     startSec,
@@ -147,9 +160,30 @@ export async function buildRenderSpec(
     cropKeyframes: opts.cropKeyframes,
     zoomKeyframes: opts.zoomKeyframes,
     music: opts.music ?? null,
-    sponsor: opts.sponsor ? sanitizeSponsorPackage(opts.sponsor) : null,
+    sponsor,
     loudnessNormalize: true,
   };
 
   return { spec, clipId };
+}
+
+function resolveSponsorOverlay(userId: string, input: SponsorPackage) {
+  try {
+    const sanitized = sanitizeSponsorPackage(input);
+    return {
+      sponsorName: sanitized.sponsorName,
+      logoUrl: resolveSponsorLogoUrl(userId, sanitized.logoKey, {
+        storageConfigured,
+        presignDownload,
+      }),
+      placement: sanitized.placement,
+      opacity: sanitized.opacity,
+      safeAreaPercent: sanitized.safeAreaPercent,
+      accentColor: sanitized.accentColor,
+      callToAction: sanitized.callToAction,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid sponsor package';
+    throw Object.assign(new Error(message), { status: 400 });
+  }
 }

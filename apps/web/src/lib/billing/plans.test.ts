@@ -10,17 +10,17 @@ describe('resolvePlan', () => {
 });
 
 describe('evaluateQuota', () => {
-  it('allows usage below the limit and reports remaining', () => {
+  it('treats the current unlimited free plan as uncapped', () => {
     const check = evaluateQuota(PLANS.free, 'rendersPerMonth', 10);
     expect(check.allowed).toBe(true);
-    expect(check.limit).toBe(15);
-    expect(check.remaining).toBe(5);
+    expect(check.limit).toBe(-1);
+    expect(check.remaining).toBe(Infinity);
   });
 
-  it('blocks at the limit', () => {
+  it('does not block unlimited free usage at a former paid cap', () => {
     const check = evaluateQuota(PLANS.free, 'rendersPerMonth', 15);
-    expect(check.allowed).toBe(false);
-    expect(check.remaining).toBe(0);
+    expect(check.allowed).toBe(true);
+    expect(check.remaining).toBe(Infinity);
   });
 
   it('treats negative limits as unlimited', () => {

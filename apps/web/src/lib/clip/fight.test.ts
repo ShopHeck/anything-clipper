@@ -70,13 +70,35 @@ describe('planFightClip', () => {
     expect(planned.start).toBe(12);
     expect(planned.end).toBe(30);
   });
+
+  it('prefers known round markers over a hallucinated model round', () => {
+    const planned = planFightClip(
+      { ...candidate, round: 5 },
+      {
+        roundMarkers: [{ round: 2, start: 200, end: 215 }],
+        sourceDurationSec: 500,
+      }
+    );
+    expect(planned.round).toBe(2);
+  });
+
+  it('prefers supplied fighter names over model names', () => {
+    const planned = planFightClip(
+      { ...candidate, fighterNames: ['Invented', 'Names'] },
+      {
+        fighterNames: ['Mike Heckert', 'Opponent'],
+        sourceDurationSec: 500,
+      }
+    );
+    expect(planned.fighterNames).toEqual(['Mike Heckert', 'Opponent']);
+  });
 });
 
 describe('sanitizeSponsorPackage', () => {
   it('normalizes safe sponsor branding and clamps opacity', () => {
     const sponsor = sanitizeSponsorPackage({
       sponsorName: '  ACME Fight Gear  ',
-      logoUrl: 'https://cdn.example.com/logo.png',
+      logoKey: 'sponsor-logos/user-1/logo.png',
       placement: 'top-right',
       opacity: 4,
       safeAreaPercent: 2,
@@ -86,7 +108,7 @@ describe('sanitizeSponsorPackage', () => {
 
     expect(sponsor).toEqual({
       sponsorName: 'ACME Fight Gear',
-      logoUrl: 'https://cdn.example.com/logo.png',
+      logoKey: 'sponsor-logos/user-1/logo.png',
       placement: 'top-right',
       opacity: 1,
       safeAreaPercent: 5,
@@ -95,28 +117,46 @@ describe('sanitizeSponsorPackage', () => {
     });
   });
 
-  it('rejects unsafe logo protocols and invalid colors', () => {
+  it('rejects client-supplied logo URLs, local paths, and invalid colors', () => {
+    expect(() =>
+      sanitizeSponsorPackage({
+        sponsorName: 'ACME',
+        logoUrl: 'https://cdn.example.com/logo.png',
+        accentColor: 'red; movie=bad',
+      } as never)
+    ).toThrow(/logoUrl|accentColor|logoKey/);
+    expect(() =>
+      sanitizeSponsorPackage({
+        sponsorName: 'ACME',
+        logoUrl: '/etc/passwd',
+      } as never)
+    ).toThrow(/logoUrl/);
     expect(() =>
       sanitizeSponsorPackage({
         sponsorName: 'ACME',
         logoUrl: 'file:///etc/passwd',
-        accentColor: 'red; movie=bad',
-      })
-    ).toThrow(/logoUrl|accentColor/);
+      } as never)
+    ).toThrow(/logoUrl/);
   });
 
-  it('rejects loopback and private-network logo hosts', () => {
-    for (const logoUrl of [
-      'https://localhost/logo.png',
-      'https://127.0.0.1/logo.png',
-      'https://10.0.0.8/logo.png',
-      'https://172.16.0.8/logo.png',
-      'https://192.168.1.8/logo.png',
-      'https://169.254.169.254/latest/meta-data',
-    ]) {
-      expect(() => sanitizeSponsorPackage({ sponsorName: 'ACME', logoUrl })).toThrow(
-        /public https host/
-      );
-    }
+  it('rejects traversal, foreign prefixes, and invalid placement', () => {
+    expect(() =>
+      sanitizeSponsorPackage({
+        sponsorName: 'ACME',
+        logoKey: 'sponsor-logos/user-1/../secret.png',
+      })
+    ).toThrow(/logoKey/);
+    expect(() =>
+      sanitizeSponsorPackage({
+        sponsorName: 'ACME',
+        logoKey: 'uploads/user-1/logo.png',
+      })
+    ).toThrow(/logoKey/);
+    expect(() =>
+      sanitizeSponsorPackage({
+        sponsorName: 'ACME',
+        placement: 'middle' as never,
+      })
+    ).toThrow(/placement/);
   });
 });

@@ -17,10 +17,13 @@ export interface FightRoundMarker {
   end: number;
 }
 
+export const SPONSOR_PLACEMENTS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
+export type SponsorPlacement = (typeof SPONSOR_PLACEMENTS)[number];
+
 export interface SponsorPackage {
   sponsorName: string;
-  logoUrl?: string;
-  placement?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  logoKey?: string;
+  placement?: SponsorPlacement;
   opacity?: number;
   safeAreaPercent?: number;
   accentColor?: string;
@@ -95,10 +98,8 @@ export function planFightClip(
     ...candidate,
     start: clamp(rawStart - before, lowerBound, upperBound),
     end: clamp(rawEnd + after, lowerBound, upperBound),
-    round: candidate.round ?? matchingRound?.round,
-    fighterNames: candidate.fighterNames?.length
-      ? candidate.fighterNames
-      : context.fighterNames?.filter(Boolean),
+    round: matchingRound?.round ?? candidate.round,
+    fighterNames: trustedNames(context.fighterNames) ?? candidate.fighterNames,
     contentMode: context.mode && context.mode !== 'generic' ? context.mode : 'fight',
   };
 }
@@ -107,18 +108,23 @@ export function sanitizeSponsorPackage(input: SponsorPackage): Required<SponsorP
   const errors: string[] = [];
   const sponsorName = input.sponsorName?.trim();
   if (!sponsorName) errors.push('sponsorName is required');
-  const logoUrl = input.logoUrl?.trim() ?? '';
-  if (logoUrl && !isSafeAssetUrl(logoUrl)) {
-    errors.push('logoUrl must use a local / path or a public https host');
+  if ('logoUrl' in input && (input as { logoUrl?: unknown }).logoUrl !== undefined) {
+    errors.push('logoUrl is not accepted; upload a logo and use logoKey');
   }
+  const logoKey = input.logoKey?.trim() ?? '';
+  if (logoKey && !isSponsorLogoKey(logoKey)) {
+    errors.push('logoKey must be a controlled sponsor-logos asset key');
+  }
+  const placement = input.placement ?? 'top-right';
+  if (!SPONSOR_PLACEMENTS.includes(placement)) errors.push('placement is invalid');
   const color = (input.accentColor ?? '#FFFFFF').trim().toUpperCase();
   if (!/^#[0-9A-F]{6}$/.test(color)) errors.push('accentColor must be a six-digit hex color');
   if (errors.length) throw new Error(errors.join('; '));
 
   return {
-    sponsorName,
-    logoUrl,
-    placement: input.placement ?? 'top-right',
+    sponsorName: sponsorName as string,
+    logoKey,
+    placement,
     opacity: clamp(finiteOr(input.opacity, 0.9), 0.25, 1),
     safeAreaPercent: clamp(finiteOr(input.safeAreaPercent, 8), 5, 15),
     accentColor: color,
@@ -126,42 +132,17 @@ export function sanitizeSponsorPackage(input: SponsorPackage): Required<SponsorP
   };
 }
 
-function isSafeAssetUrl(url: string): boolean {
-  if (url.startsWith('/')) return !url.startsWith('//') && !url.includes('..');
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' && !isPrivateHostname(parsed.hostname);
-  } catch {
-    return false;
-  }
+function isSponsorLogoKey(key: string): boolean {
+  return (
+    /^sponsor-logos\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._/-]+$/.test(key) &&
+    !key.includes('..') &&
+    !key.includes('//')
+  );
 }
 
-function isPrivateHostname(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (
-    host === 'localhost' ||
-    host === '0.0.0.0' ||
-    host === '::1' ||
-    host.endsWith('.localhost') ||
-    host.endsWith('.local')
-  ) {
-    return true;
-  }
-  const octets = host.split('.').map(Number);
-  if (
-    octets.length !== 4 ||
-    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
-  ) {
-    return false;
-  }
-  return (
-    octets[0] === 10 ||
-    octets[0] === 127 ||
-    octets[0] === 0 ||
-    (octets[0] === 169 && octets[1] === 254) ||
-    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-    (octets[0] === 192 && octets[1] === 168)
-  );
+function trustedNames(names: string[] | undefined): string[] | undefined {
+  const cleaned = (names ?? []).map((name) => name.trim()).filter(Boolean);
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 function isValidRound(marker: FightRoundMarker): boolean {

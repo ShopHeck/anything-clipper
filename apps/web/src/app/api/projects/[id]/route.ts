@@ -1,5 +1,6 @@
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
+import { clipPersistenceValues, mapPersistedClip } from '@/lib/clip/persist';
 
 // Every handler verifies the project belongs to the signed-in user before
 // touching it (or any of its child rows).
@@ -19,7 +20,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const [project] = await sql`
       SELECT id, title, file_name, file_url, storage_key, total_duration, viral_score,
-             word_count, clip_count, status, created_at, updated_at
+             word_count, clip_count, status, created_at, updated_at,
+             content_mode, fight_context, sponsor_package
       FROM projects WHERE id = ${id} AND user_id = ${user.id}
     `;
 
@@ -36,13 +38,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const clips = await sql`
       SELECT id, title, hook, score, platforms, start_time, end_time, duration_label,
-             reason, thumbnail, rendered_url, render_status, created_at
+             reason, thumbnail, rendered_url, render_status, created_at,
+             keywords, moment_type, fight_round, fighter_names, sponsor_friendly, content_mode
       FROM clips
       WHERE project_id = ${id}
       ORDER BY created_at ASC
     `;
 
-    return Response.json({ project, segments, clips });
+    return Response.json({
+      project,
+      segments,
+      clips: (clips as Parameters<typeof mapPersistedClip>[0][]).map(mapPersistedClip),
+    });
   } catch (error) {
     console.error('Get project error:', error);
     return Response.json({ error: 'Failed to get project' }, { status: 500 });
@@ -71,6 +78,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       segments,
       clips,
       transcript_words,
+      content_mode,
+      fight_context,
+      sponsor_package,
     } = body;
 
     // Build dynamic update
@@ -110,6 +120,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       setClauses.push(`transcript_words = $${idx++}`);
       values.push(JSON.stringify(transcript_words));
     }
+    if (content_mode !== undefined) {
+      setClauses.push(`content_mode = $${idx++}`);
+      values.push(content_mode);
+    }
+    if (fight_context !== undefined) {
+      setClauses.push(`fight_context = $${idx++}`);
+      values.push(JSON.stringify(fight_context));
+    }
+    if (sponsor_package !== undefined) {
+      setClauses.push(`sponsor_package = $${idx++}`);
+      values.push(JSON.stringify(sponsor_package));
+    }
 
     setClauses.push(`updated_at = NOW()`);
 
@@ -134,9 +156,20 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (clips && clips.length > 0) {
       await sql`DELETE FROM clips WHERE project_id = ${id}`;
       for (const clip of clips) {
+        const row = clipPersistenceValues(clip);
         await sql`
-          INSERT INTO clips (id, project_id, title, hook, score, platforms, start_time, end_time, duration_label, reason, thumbnail)
-          VALUES (${clip.id}, ${id}, ${clip.title}, ${clip.hook}, ${clip.score ?? 75}, ${clip.platforms ?? []}, ${clip.start ?? 0}, ${clip.end ?? 0}, ${clip.duration ?? '0:00'}, ${clip.reason ?? ''}, ${clip.thumbnail ?? ''})
+          INSERT INTO clips (
+            id, project_id, title, hook, score, platforms, start_time, end_time,
+            duration_label, reason, thumbnail, keywords, moment_type, fight_round,
+            fighter_names, sponsor_friendly, content_mode
+          )
+          VALUES (
+            ${row.id}, ${id}, ${row.title}, ${row.hook}, ${row.score}, ${row.platforms},
+            ${row.start_time}, ${row.end_time}, ${row.duration_label}, ${row.reason},
+            ${row.thumbnail}, ${JSON.stringify(row.keywords)}, ${row.moment_type},
+            ${row.fight_round}, ${JSON.stringify(row.fighter_names)}, ${row.sponsor_friendly},
+            ${row.content_mode}
+          )
         `;
       }
       // Update clip count
