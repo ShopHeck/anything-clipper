@@ -35,8 +35,6 @@ describe('parseGenerateClipsInput', () => {
     [{ count: 0 }, 'count'],
     [{ count: 51 }, 'count'],
     [{ words: 'wrong' }, 'words'],
-    [{ words: [{ text: 'x', start: 2, end: 1 }] }, 'words'],
-    [{ segments: [{ id: 's', start: -1, end: 2 }] }, 'segments'],
     [{ context: { mode: 'combat' } }, 'mode'],
     [{ context: { fighterNames: [123] } }, 'fighterNames'],
     [{ context: { sourceDurationSec: -1 } }, 'sourceDurationSec'],
@@ -44,6 +42,22 @@ describe('parseGenerateClipsInput', () => {
     [{ context: { sponsor: { sponsorName: '', placement: 'middle' } } }, 'sponsor'],
   ])('rejects malformed input with a field-specific validation error', (input, field) => {
     expect(() => parseGenerateClipsInput(input)).toThrow(new RegExp(field));
+  });
+
+  it('skips zero-duration or empty transcript tokens instead of failing the request', () => {
+    const parsed = parseGenerateClipsInput({
+      words: [
+        { text: 'action', start: 2, end: 3 },
+        { text: 'x', start: 2, end: 1 },
+        { text: '   ', start: 3, end: 4 },
+      ],
+      segments: [
+        { id: 's1', start: 0, end: 5, text: 'action' },
+        { id: 's', start: -1, end: 2 },
+      ],
+    });
+    expect(parsed.words).toEqual([{ text: 'action', start: 2, end: 3 }]);
+    expect(parsed.segments).toEqual([{ id: 's1', start: 0, end: 5, text: 'action' }]);
   });
 });
 
@@ -75,6 +89,18 @@ describe('parseRenderInput', () => {
     [{ projectId: 'p', mode: 'clip' }, 'clipId'],
     [{ projectId: 'p', mode: 'timeline', ratio: '4:3' }, 'ratio'],
     [{ projectId: 'p', mode: 'timeline', music: { url: 'file:///tmp/a', volume: 1 } }, 'music'],
+    [
+      {
+        projectId: 'p',
+        mode: 'timeline',
+        music: { url: 'https://169.254.169.254/a.mp3', volume: 0.2 },
+      },
+      'music',
+    ],
+    [
+      { projectId: 'p', mode: 'timeline', music: { url: 'https://localhost/a.mp3', volume: 0.2 } },
+      'music',
+    ],
     [{ projectId: 'p', mode: 'timeline', music: { url: 'https://x', volume: 2 } }, 'volume'],
     [
       { projectId: 'p', mode: 'timeline', sponsor: { sponsorName: 'x', logoUrl: '/etc/passwd' } },

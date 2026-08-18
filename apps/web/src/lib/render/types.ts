@@ -37,6 +37,7 @@ export interface SpeedRange {
 
 export interface SponsorOverlay {
   sponsorName: string;
+  logoKey?: string;
   logoUrl?: string;
   placement?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   opacity?: number;

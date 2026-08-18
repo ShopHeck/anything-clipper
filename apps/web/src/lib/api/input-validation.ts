@@ -1,5 +1,6 @@
 import type { TimedWord } from '@/lib/clip/boundaries';
 import type { FightAnalysisContext, SponsorPackage } from '@/lib/clip/fight';
+import { isSponsorLogoKey } from '@/lib/clip/fight';
 import type { RenderRequestOptions } from '@/lib/render/spec';
 
 export class ValidationError extends Error {
@@ -36,8 +37,20 @@ export function parseGenerateClipsInput(value: unknown): GenerateClipsInput {
   return {
     transcript: optionalString(body.transcript, 'transcript', 20_000) ?? '',
     count: body.count === undefined ? 5 : integer(body.count, 'count', 1, 50),
-    segments: body.segments === undefined ? [] : array(body.segments, 'segments').map(parseSegment),
-    words: body.words === undefined ? [] : array(body.words, 'words').map(parseWord),
+    segments:
+      body.segments === undefined
+        ? []
+        : array(body.segments, 'segments').flatMap((value, index) => {
+            const segment = tryParseSegment(value, index);
+            return segment ? [segment] : [];
+          }),
+    words:
+      body.words === undefined
+        ? []
+        : array(body.words, 'words').flatMap((value, index) => {
+            const word = tryParseWord(value, index);
+            return word ? [word] : [];
+          }),
     context: body.context === undefined ? {} : parseFightContext(body.context),
   };
 }
@@ -170,32 +183,45 @@ function parseMusic(value: unknown): { url: string; volume: number } {
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
     throw new ValidationError('music.url must be a credential-free HTTPS URL');
   }
+  if (isPrivateHostname(parsed.hostname)) {
+    throw new ValidationError('music.url must use a public HTTPS host');
+  }
   return { url, volume: finiteNumber(input.volume, 'music.volume', 0, 1) };
 }
 
-function parseSegment(value: unknown, index: number): InputSegment {
-  const input = object(value, `segments[${index}]`);
-  const start = finiteNumber(input.start, `segments[${index}].start`, 0, 24 * 3600);
-  const end = finiteNumber(input.end, `segments[${index}].end`, 0, 24 * 3600);
-  if (end <= start) throw new ValidationError(`segments[${index}].end must be greater than start`);
+function tryParseSegment(value: unknown, index: number): InputSegment | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (typeof input.start !== 'number' || typeof input.end !== 'number') return null;
+  if (!Number.isFinite(input.start) || !Number.isFinite(input.end) || input.end <= input.start) {
+    return null;
+  }
+  if (input.start < 0 || input.end > 24 * 3600) return null;
+  const id = typeof input.id === 'string' ? input.id.trim() : '';
+  if (!id) return null;
+  const text = typeof input.text === 'string' ? input.text.trim() : undefined;
   return {
-    id: requiredString(input.id, `segments[${index}].id`, 200),
-    start,
-    end,
-    text: optionalString(input.text, `segments[${index}].text`, 20_000),
+    id: id.slice(0, 200),
+    start: input.start,
+    end: input.end,
+    text: text ? text.slice(0, 20_000) : undefined,
     viralScore:
-      input.viralScore === undefined
-        ? undefined
-        : finiteNumber(input.viralScore, `segments[${index}].viralScore`, 0, 100),
+      typeof input.viralScore === 'number' && Number.isFinite(input.viralScore)
+        ? Math.min(100, Math.max(0, input.viralScore))
+        : undefined,
   };
 }
 
-function parseWord(value: unknown, index: number): TimedWord {
-  const input = object(value, `words[${index}]`);
-  const start = finiteNumber(input.start, `words[${index}].start`, 0, 24 * 3600);
-  const end = finiteNumber(input.end, `words[${index}].end`, 0, 24 * 3600);
-  if (end <= start) throw new ValidationError(`words[${index}].end must be greater than start`);
-  return { text: requiredString(input.text, `words[${index}].text`, 500), start, end };
+function tryParseWord(value: unknown, index: number): TimedWord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (typeof input.text !== 'string' || !input.text.trim()) return null;
+  if (typeof input.start !== 'number' || typeof input.end !== 'number') return null;
+  if (!Number.isFinite(input.start) || !Number.isFinite(input.end) || input.end <= input.start) {
+    return null;
+  }
+  if (input.start < 0 || input.end > 24 * 3600) return null;
+  return { text: input.text.trim().slice(0, 500), start: input.start, end: input.end };
 }
 
 function parseZoomKeyframes(value: unknown): Array<{ t: number; scale: number }> | undefined {
@@ -229,11 +255,34 @@ function keyedFrames(
   });
 }
 
-export function isSponsorLogoKey(key: string): boolean {
+function isPrivateHostname(hostname: string): boolean {
+  const host = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
+  if (
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local')
+  ) {
+    return true;
+  }
+  const octets = host.split('.').map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return false;
+  }
   return (
-    /^sponsor-logos\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._/-]+$/.test(key) &&
-    !key.includes('..') &&
-    !key.includes('//')
+    octets[0] === 10 ||
+    octets[0] === 127 ||
+    octets[0] === 0 ||
+    (octets[0] === 169 && octets[1] === 254) ||
+    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && octets[1] === 168)
   );
 }
 

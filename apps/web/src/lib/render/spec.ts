@@ -6,7 +6,7 @@ import { groupWordsIntoLines } from '@/lib/captions/ass';
 import { translateLines, translatedLinesToWords } from '@/lib/captions/translate';
 import { sanitizeSponsorPackage, SponsorPackage } from '@/lib/clip/fight';
 import { presignDownload, storageConfigured } from '@/app/api/utils/storage';
-import { resolveSponsorLogoUrl } from './sponsor';
+import { isOwnedSponsorLogoKey } from './sponsor';
 import { AspectRatio, CutRange, RenderSpec, SpecWord } from './types';
 
 export interface RenderRequestOptions {
@@ -170,12 +170,18 @@ export async function buildRenderSpec(
 function resolveSponsorOverlay(userId: string, input: SponsorPackage) {
   try {
     const sanitized = sanitizeSponsorPackage(input);
+    if (sanitized.logoKey) {
+      if (!isOwnedSponsorLogoKey(userId, sanitized.logoKey)) {
+        throw new Error('logoKey must be a sponsor-logos asset owned by the current user');
+      }
+      if (!storageConfigured()) {
+        throw new Error('Object storage is required to render sponsor logos');
+      }
+    }
     return {
       sponsorName: sanitized.sponsorName,
-      logoUrl: resolveSponsorLogoUrl(userId, sanitized.logoKey, {
-        storageConfigured,
-        presignDownload,
-      }),
+      logoKey: sanitized.logoKey || undefined,
+      logoUrl: undefined,
       placement: sanitized.placement,
       opacity: sanitized.opacity,
       safeAreaPercent: sanitized.safeAreaPercent,

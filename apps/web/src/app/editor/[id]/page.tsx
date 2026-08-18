@@ -36,6 +36,7 @@ import {
   Loader,
 } from 'lucide-react';
 import { videoStore, type TranscriptSegment, type SponsorPackageState } from '@/utils/videoStore';
+import { projectSaveError } from '@/lib/clip/project-save';
 
 // ─── Types ────────────────────────────────────────────────────
 type Panel = 'transcript' | 'effects' | 'captions' | 'music' | 'export';
@@ -608,12 +609,30 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       setSponsorLogoKey(key);
       setSponsorLogoName(file.name);
       setSponsorEnabled(true);
+      if (projectId && projectId !== 'new') {
+        const saveRes = await fetch(`/api/projects/${projectId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sponsor_package: {
+              sponsorName: sponsorName.trim() || file.name.replace(/\.[^/.]+$/, ''),
+              logoKey: key,
+              placement: sponsorPlacement,
+            },
+          }),
+        });
+        const saveError = projectSaveError(
+          saveRes,
+          (await saveRes.json().catch(() => ({}))).error
+        );
+        if (saveError) throw new Error(saveError);
+      }
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Logo upload failed.');
     } finally {
       setSponsorBusy(false);
     }
-  }, []);
+  }, [projectId, sponsorName, sponsorPlacement]);
 
   // Download an SRT/VTT subtitle file, optionally translated, built from the
   // project's word timestamps on the server.

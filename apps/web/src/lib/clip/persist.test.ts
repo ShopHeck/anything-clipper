@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clipPersistenceValues, mapPersistedClip } from './persist';
+import { clipPersistenceValues, mapPersistedClip, sanitizeStoredSponsorPackage } from './persist';
 
 describe('clip persistence', () => {
   it('keeps fight metadata through a save/reload mapping', () => {
@@ -78,5 +78,24 @@ describe('clip persistence', () => {
     expect(values.fight_round).toBeNull();
     expect(values.fighter_names).toEqual([]);
     expect(values.content_mode).toBeNull();
+  });
+
+  it('strips persisted logo URLs and invalid keys', () => {
+    expect(
+      sanitizeStoredSponsorPackage({
+        sponsorName: 'ACME',
+        logoUrl: 'https://cdn.example.com/logo.png',
+        logoKey: '../secret',
+        placement: 'top-right',
+      })
+    ).toEqual({
+      sponsorName: 'ACME',
+      logoKey: undefined,
+      placement: 'top-right',
+      opacity: undefined,
+      safeAreaPercent: undefined,
+      accentColor: undefined,
+      callToAction: undefined,
+    });
   });
 });
