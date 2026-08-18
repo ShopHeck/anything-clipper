@@ -8,10 +8,8 @@ import {
   storageConfigured,
 } from '@/app/api/utils/storage';
 
-// POST /api/media/presign { fileName, contentType }
-// → { key, uploadUrl, readUrl }
-// The client PUTs the file straight to object storage (no proxying through
-// the app server), then uses readUrl for transcription/publishing.
+const SPONSOR_LOGO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+
 export async function POST(request: Request) {
   const user = await getApiUser(request);
   if (!user) return unauthorized();
@@ -33,8 +31,26 @@ export async function POST(request: Request) {
   if (!limit.ok) return rateLimited(limit);
 
   try {
-    const { fileName } = (await request.json()) as { fileName?: string };
-    const key = buildObjectKey(user.id, fileName || 'video');
+    const body = (await request.json()) as {
+      fileName?: string;
+      contentType?: string;
+      purpose?: string;
+    };
+    const purpose = body.purpose === 'sponsor-logo' ? 'sponsor-logo' : 'upload';
+    if (purpose === 'sponsor-logo') {
+      const contentType = (body.contentType ?? '').split(';', 1)[0].trim().toLowerCase();
+      if (!SPONSOR_LOGO_TYPES.has(contentType)) {
+        return Response.json(
+          { error: 'Sponsor logos must be PNG, JPEG, WebP, or GIF files.' },
+          { status: 400 }
+        );
+      }
+    }
+    const key = buildObjectKey(
+      user.id,
+      body.fileName || (purpose === 'sponsor-logo' ? 'logo.png' : 'video'),
+      purpose === 'sponsor-logo' ? 'sponsor-logos' : 'uploads'
+    );
     return Response.json({
       key,
       uploadUrl: presignUpload(key, 3600),

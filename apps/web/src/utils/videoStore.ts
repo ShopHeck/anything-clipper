@@ -22,6 +22,22 @@ export interface ViralClip {
   platforms: string[];
   reason: string;
   thumbnail?: string;
+  keywords?: string[];
+  momentType?: string;
+  round?: number;
+  fighterNames?: string[];
+  sponsorFriendly?: boolean;
+  contentMode?: 'generic' | 'fight' | 'sponsor';
+}
+
+export interface SponsorPackageState {
+  sponsorName: string;
+  logoKey?: string;
+  placement?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  opacity?: number;
+  safeAreaPercent?: number;
+  accentColor?: string;
+  callToAction?: string;
 }
 
 interface VideoStore {
@@ -33,6 +49,8 @@ interface VideoStore {
   clips: ViralClip[];
   overallScore: number;
   totalDuration: number; // seconds
+  contentMode: ViralClip['contentMode'] | null;
+  sponsorPackage: SponsorPackageState | null;
 }
 
 const store: VideoStore = {
@@ -44,6 +62,8 @@ const store: VideoStore = {
   clips: [],
   overallScore: 0,
   totalDuration: 0,
+  contentMode: null,
+  sponsorPackage: null,
 };
 
 export const videoStore = {
@@ -78,6 +98,14 @@ export const videoStore = {
     store.overallScore = score;
   },
 
+  setContentMode(mode: ViralClip['contentMode'] | null) {
+    store.contentMode = mode;
+  },
+
+  setSponsorPackage(sponsor: SponsorPackageState | null) {
+    store.sponsorPackage = sponsor;
+  },
+
   getAll(): VideoStore {
     return { ...store };
   },
@@ -106,6 +134,14 @@ export const videoStore = {
     return store.totalDuration;
   },
 
+  getContentMode() {
+    return store.contentMode;
+  },
+
+  getSponsorPackage() {
+    return store.sponsorPackage;
+  },
+
   hasVideo() {
     return store.objectUrl !== null;
   },
@@ -121,5 +157,7 @@ export const videoStore = {
     store.clips = [];
     store.overallScore = 0;
     store.totalDuration = 0;
+    store.contentMode = null;
+    store.sponsorPackage = null;
   },
 };

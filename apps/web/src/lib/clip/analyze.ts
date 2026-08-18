@@ -5,6 +5,12 @@
 import { chatCompletionJson } from '@/app/api/utils/ai';
 import { snapClipBoundaries, TimedWord } from './boundaries';
 import { chunkTranscript, TranscriptChunk } from './transcript';
+import {
+  buildFightAnalysisBrief,
+  FightAnalysisContext,
+  FightMomentType,
+  planFightClip,
+} from './fight';
 
 export interface CandidateClip {
   title: string;
@@ -15,6 +21,11 @@ export interface CandidateClip {
   start: number;
   end: number;
   keywords: string[];
+  momentType?: FightMomentType;
+  round?: number;
+  fighterNames?: string[];
+  sponsorFriendly?: boolean;
+  contentMode?: 'generic' | 'fight' | 'sponsor';
 }
 
 const CLIP_SCHEMA = {
@@ -35,8 +46,21 @@ const CLIP_SCHEMA = {
             startSec: { type: 'number' },
             endSec: { type: 'number' },
             keywords: { type: 'array', items: { type: 'string' } },
+            momentType: { type: 'string' },
+            round: { type: ['number', 'null'] },
+            fighterNames: { type: 'array', items: { type: 'string' } },
+            sponsorFriendly: { type: 'boolean' },
           },
-          required: ['title', 'hook', 'score', 'platforms', 'reason', 'startSec', 'endSec', 'keywords'],
+          required: [
+            'title',
+            'hook',
+            'score',
+            'platforms',
+            'reason',
+            'startSec',
+            'endSec',
+            'keywords',
+          ],
           additionalProperties: false,
         },
       },
@@ -55,18 +79,22 @@ interface RawClip {
   startSec: number;
   endSec: number;
   keywords: string[];
+  momentType?: FightMomentType;
+  round?: number | null;
+  fighterNames?: string[];
+  sponsorFriendly?: boolean;
 }
 
 async function findClipsInChunk(
   chunk: TranscriptChunk,
-  perChunk: number
+  perChunk: number,
+  context: FightAnalysisContext
 ): Promise<CandidateClip[]> {
   const parsed = await chatCompletionJson<{ clips: RawClip[] }>(
     [
       {
         role: 'system',
-        content:
-          'You are a viral short-form editor. You find the most shareable 20–90s moments in a transcript for TikTok, Reels, and YouTube Shorts: strong hooks, curiosity gaps, surprising claims, emotional peaks, and quotable lines. Timestamps you return MUST fall within the provided time range.',
+        content: `${buildFightAnalysisBrief(context)} Timestamps you return MUST fall within the provided time range.`,
       },
       {
         role: 'user',
@@ -95,18 +123,22 @@ Transcript section:
     start: clamp(c.startSec, chunk.startSec, chunk.endSec),
     end: clamp(c.endSec, chunk.startSec, chunk.endSec),
     keywords: c.keywords ?? [],
+    momentType: c.momentType,
+    round: c.round ?? undefined,
+    fighterNames: c.fighterNames ?? [],
+    sponsorFriendly: c.sponsorFriendly,
+    contentMode: context.mode ?? 'generic',
   }));
 }
 
 export interface AnalyzeOptions {
   count: number;
   words: TimedWord[];
+  context?: FightAnalysisContext;
 }
 
-export async function analyzeTranscript(
-  opts: AnalyzeOptions
-): Promise<CandidateClip[]> {
-  const { words, count } = opts;
+export async function analyzeTranscript(opts: AnalyzeOptions): Promise<CandidateClip[]> {
+  const { words, count, context = {} } = opts;
   const chunks = chunkTranscript(words);
   if (chunks.length === 0) return [];
 
@@ -115,7 +147,7 @@ export async function analyzeTranscript(
   const perChunk = Math.max(2, Math.ceil((count * 1.5) / chunks.length));
   const results = await Promise.all(
     chunks.map((chunk) =>
-      findClipsInChunk(chunk, perChunk).catch((err) => {
+      findClipsInChunk(chunk, perChunk, context).catch((err) => {
         console.error(`Chunk ${chunk.index} analysis failed:`, err);
         return [] as CandidateClip[];
       })
@@ -131,7 +163,8 @@ export async function analyzeTranscript(
   const snapped = all
     .map((c) => {
       const { start, end } = snapClipBoundaries(words, c.start, c.end);
-      return { ...c, start, end };
+      const snapped = { ...c, start, end };
+      return context.mode && context.mode !== 'generic' ? planFightClip(snapped, context) : snapped;
     })
     .filter((c) => c.end - c.start >= 8 && c.end - c.start <= 120);
 

@@ -76,6 +76,11 @@ export default function UploadPage() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [statusDetail, setStatusDetail] = useState('');
+  const [contentMode, setContentMode] = useState<'generic' | 'fight' | 'sponsor'>('fight');
+  const [fighterOne, setFighterOne] = useState('');
+  const [fighterTwo, setFighterTwo] = useState('');
+  const [eventName, setEventName] = useState('');
+  const [sponsorName, setSponsorName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -278,11 +283,27 @@ export default function UploadPage() {
             count: 6,
             segments: transcribeResult.segments,
             words: (transcribeResult as { words?: unknown[] }).words ?? [],
+            context: {
+              mode: contentMode,
+              fighterNames: [fighterOne, fighterTwo].map((value) => value.trim()).filter(Boolean),
+              eventName: eventName.trim() || undefined,
+              sourceDurationSec: transcribeResult.totalDuration || totalDuration,
+              sponsor:
+                contentMode === 'sponsor' && sponsorName.trim()
+                  ? { sponsorName: sponsorName.trim() }
+                  : undefined,
+            },
           }),
         });
         if (!clipsRes.ok) throw new Error('Clip generation failed');
         const clipsData = await clipsRes.json();
         videoStore.setClips(clipsData.clips || []);
+        videoStore.setContentMode(contentMode);
+        videoStore.setSponsorPackage(
+          contentMode === 'sponsor' && sponsorName.trim()
+            ? { sponsorName: sponsorName.trim() }
+            : null
+        );
         await analysisProgressPromise;
 
         // ── Stage 4: Save project to database ───────────────
@@ -315,8 +336,7 @@ export default function UploadPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 total_duration: transcribeResult.totalDuration || totalDuration,
-                transcript_words:
-                  (transcribeResult as { words?: unknown[] }).words ?? undefined,
+                transcript_words: (transcribeResult as { words?: unknown[] }).words ?? undefined,
                 viral_score: transcribeResult.overallScore || 80,
                 word_count: (transcribeResult.segments as Array<{ text: string }>).reduce(
                   (a, s) => a + s.text.split(' ').length,
@@ -324,6 +344,18 @@ export default function UploadPage() {
                 ),
                 segments: segs.map((s, i) => ({ ...s, sortOrder: i })),
                 clips: clipsData.clips || [],
+                content_mode: contentMode,
+                fight_context: {
+                  mode: contentMode,
+                  fighterNames: [fighterOne, fighterTwo]
+                    .map((value) => value.trim())
+                    .filter(Boolean),
+                  eventName: eventName.trim() || undefined,
+                },
+                sponsor_package:
+                  contentMode === 'sponsor' && sponsorName.trim()
+                    ? { sponsorName: sponsorName.trim() }
+                    : null,
               }),
             });
           }
@@ -342,7 +374,7 @@ export default function UploadPage() {
         setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       }
     },
-    [animateTo, pollTranscript, router]
+    [animateTo, contentMode, eventName, fighterOne, fighterTwo, pollTranscript, router, sponsorName]
   );
 
   const handleFile = useCallback(
@@ -575,11 +607,69 @@ export default function UploadPage() {
         </div>
 
         <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-black mb-3">Upload your video</h1>
+          <h1 className="text-3xl md:text-4xl font-black mb-3">
+            Turn fight footage into sponsor-ready clips
+          </h1>
           <p className="text-white/45 text-lg leading-relaxed max-w-lg mx-auto">
-            Drop any video or audio file. We'll transcribe every word, find your best viral moments,
-            and format clips for TikTok, Reels & Shorts.
+            Preserve complete exchanges, crowd reactions, corner quotes, and clean sponsor-safe
+            frames for TikTok, Reels & Shorts.
           </p>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+          <div className="mb-3 text-sm font-semibold text-white/75">Clip mode</div>
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                ['fight', 'Fight highlights'],
+                ['sponsor', 'Sponsor package'],
+                ['generic', 'General video'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setContentMode(value)}
+                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                  contentMode === value
+                    ? 'border-violet-400/50 bg-violet-500/15 text-white'
+                    : 'border-white/8 text-white/40 hover:text-white/70'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {contentMode !== 'generic' && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <input
+                value={fighterOne}
+                onChange={(event) => setFighterOne(event.target.value)}
+                placeholder="Featured fighter"
+                className="rounded-xl border border-white/8 bg-white px-3 py-2.5 text-sm text-black placeholder:text-black/45 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+              <input
+                value={fighterTwo}
+                onChange={(event) => setFighterTwo(event.target.value)}
+                placeholder="Opponent (optional)"
+                className="rounded-xl border border-white/8 bg-white px-3 py-2.5 text-sm text-black placeholder:text-black/45 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+              <input
+                value={eventName}
+                onChange={(event) => setEventName(event.target.value)}
+                placeholder="Event name (optional)"
+                className="rounded-xl border border-white/8 bg-white px-3 py-2.5 text-sm text-black placeholder:text-black/45 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+              {contentMode === 'sponsor' && (
+                <input
+                  value={sponsorName}
+                  onChange={(event) => setSponsorName(event.target.value)}
+                  placeholder="Sponsor name"
+                  className="rounded-xl border border-white/8 bg-white px-3 py-2.5 text-sm text-black placeholder:text-black/45 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Tabs */}

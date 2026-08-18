@@ -95,6 +95,8 @@ describe('composeUGCVideo', () => {
   });
 
   it('returns failed status with helpful message when ffmpeg is not found', async () => {
+    const previous = process.env.FFMPEG_PATH;
+    process.env.FFMPEG_PATH = '/definitely/missing/ffmpeg-binary';
     mockSpawn.mockImplementation(() => createMockProcess('enoent'));
 
     // Mock fetch for all downloads
@@ -130,6 +132,8 @@ describe('composeUGCVideo', () => {
 
     warnSpy.mockRestore();
     vi.unstubAllGlobals();
+    if (previous === undefined) delete process.env.FFMPEG_PATH;
+    else process.env.FFMPEG_PATH = previous;
   });
 
   it('downloads video clips for scenes with isVideoClip=true', async () => {
@@ -146,8 +150,20 @@ describe('composeUGCVideo', () => {
     const spec: UGCRenderSpec = {
       ttsAudioUrl: 'https://example.com/voiceover.mp3',
       scenes: [
-        { startSec: 0, endSec: 5, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip1.mp4' },
-        { startSec: 5, endSec: 10, imageUrl: '', isVideoClip: true, videoUrl: 'https://example.com/clip2.mp4' },
+        {
+          startSec: 0,
+          endSec: 5,
+          imageUrl: '',
+          isVideoClip: true,
+          videoUrl: 'https://example.com/clip1.mp4',
+        },
+        {
+          startSec: 5,
+          endSec: 10,
+          imageUrl: '',
+          isVideoClip: true,
+          videoUrl: 'https://example.com/clip2.mp4',
+        },
       ],
       captions: [],
       aspect: '9:16',

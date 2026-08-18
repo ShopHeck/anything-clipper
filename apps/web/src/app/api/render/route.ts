@@ -2,7 +2,8 @@ import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import { consumeRateLimit, rateLimited } from '@/app/api/utils/limits';
 import { checkPlanQuota, quotaExceeded } from '@/app/api/utils/quota';
 import sql from '@/app/api/utils/sql';
-import { buildRenderSpec, RenderRequestOptions } from '@/lib/render/spec';
+import { parseRenderInput, validationResponse } from '@/lib/api/input-validation';
+import { buildRenderSpec } from '@/lib/render/spec';
 
 // POST /api/render
 // Body: { projectId, mode: 'clip'|'timeline', clipId?, ratio?,
@@ -23,11 +24,7 @@ export async function POST(request: Request) {
   if (!limit.ok) return rateLimited(limit);
 
   try {
-    const body = (await request.json()) as { projectId?: string } & RenderRequestOptions;
-    const { projectId, ...opts } = body;
-    if (!projectId || !opts.mode) {
-      return Response.json({ error: 'projectId and mode are required' }, { status: 400 });
-    }
+    const { projectId, ...opts } = parseRenderInput(await request.json());
 
     const built = await buildRenderSpec(user.id, projectId, opts);
     if ('error' in built) {
@@ -42,6 +39,8 @@ export async function POST(request: Request) {
 
     return Response.json({ job });
   } catch (err) {
+    const invalid = validationResponse(err);
+    if (invalid) return invalid;
     console.error('Create render job error:', err);
     return Response.json({ error: 'Failed to create render job' }, { status: 500 });
   }

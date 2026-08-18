@@ -35,7 +35,7 @@ import {
   StopCircle,
   Loader,
 } from 'lucide-react';
-import { videoStore, type TranscriptSegment } from '@/utils/videoStore';
+import { videoStore, type TranscriptSegment, type SponsorPackageState } from '@/utils/videoStore';
 
 // ─── Types ────────────────────────────────────────────────────
 type Panel = 'transcript' | 'effects' | 'captions' | 'music' | 'export';
@@ -234,6 +234,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(0.3);
   const [musicLoading, setMusicLoading] = useState(false);
+  const [sponsorEnabled, setSponsorEnabled] = useState(false);
+  const [sponsorName, setSponsorName] = useState('');
+  const [sponsorLogoKey, setSponsorLogoKey] = useState('');
+  const [sponsorLogoName, setSponsorLogoName] = useState('');
+  const [sponsorPlacement, setSponsorPlacement] =
+    useState<NonNullable<SponsorPackageState['placement']>>('top-right');
+  const [sponsorBusy, setSponsorBusy] = useState(false);
 
   // Export
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
@@ -269,6 +276,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     if (score > 0) setViralScore(score);
     setFileName(name.replace(/\.[^/.]+$/, ''));
     setClipsCount(clips.length);
+    const storedSponsor = videoStore.getSponsorPackage();
+    if (storedSponsor?.sponsorName) {
+      setSponsorEnabled(true);
+      setSponsorName(storedSponsor.sponsorName);
+      setSponsorLogoKey(storedSponsor.logoKey ?? '');
+      setSponsorPlacement(storedSponsor.placement ?? 'top-right');
+    }
 
     // Load from DB if we have a real project ID
     if (projectId && projectId !== 'new') {
@@ -281,6 +295,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 data.project.title || data.project.file_name?.replace(/\.[^/.]+$/, '') || ''
               );
             if (data.project.viral_score && !score) setViralScore(data.project.viral_score);
+            if (!storedSponsor?.sponsorName && data.project.sponsor_package?.sponsorName) {
+              setSponsorEnabled(true);
+              setSponsorName(data.project.sponsor_package.sponsorName);
+              setSponsorLogoKey(data.project.sponsor_package.logoKey ?? '');
+              setSponsorPlacement(data.project.sponsor_package.placement ?? 'top-right');
+            }
           }
           if (data.segments && data.segments.length > 0 && segs.length === 0) {
             const mapped: TranscriptSegment[] = data.segments.map(
@@ -491,6 +511,14 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           captionTemplateId: captionStyleId,
           captionLanguage: captionLanguage || null,
           music: track && musicPlaying ? { url: track.url, volume: musicVolume } : null,
+          sponsor:
+            sponsorEnabled && sponsorName.trim()
+              ? {
+                  sponsorName: sponsorName.trim(),
+                  logoKey: sponsorLogoKey || undefined,
+                  placement: sponsorPlacement,
+                }
+              : null,
         }),
       });
       if (!createRes.ok) {
@@ -538,12 +566,53 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     selectedTrack,
     musicPlaying,
     musicVolume,
+    sponsorEnabled,
+    sponsorName,
+    sponsorLogoKey,
+    sponsorPlacement,
   ]);
 
   const cancelExport = useCallback(() => {
     exportAbortRef.current = true;
     setExportStatus('idle');
     setExportProgress(0);
+  }, []);
+
+  const uploadSponsorLogo = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Upload a PNG, JPEG, WebP, or GIF logo.');
+      return;
+    }
+    setSponsorBusy(true);
+    try {
+      const presignRes = await fetch('/api/media/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          purpose: 'sponsor-logo',
+        }),
+      });
+      if (!presignRes.ok) {
+        const data = await presignRes.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not prepare the logo upload.');
+      }
+      const { key, uploadUrl } = await presignRes.json();
+      const put = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      if (!put.ok) throw new Error('Logo upload failed.');
+      setSponsorLogoKey(key);
+      setSponsorLogoName(file.name);
+      setSponsorEnabled(true);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Logo upload failed.');
+    } finally {
+      setSponsorBusy(false);
+    }
   }, []);
 
   // Download an SRT/VTT subtitle file, optionally translated, built from the
@@ -1489,6 +1558,76 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       </span>
                     </div>
                   ))}
+                </div>
+                <div className="border-t border-white/5 pt-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[9px] font-bold text-white/35 uppercase tracking-widest">
+                      Sponsor package
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSponsorEnabled((value) => !value)}
+                      className={`text-[10px] font-semibold px-2 py-1 rounded-lg border ${
+                        sponsorEnabled
+                          ? 'border-violet-500/40 bg-violet-500/15 text-violet-200'
+                          : 'border-white/10 text-white/40'
+                      }`}
+                    >
+                      {sponsorEnabled ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                  {sponsorEnabled && (
+                    <div className="space-y-2">
+                      <input
+                        value={sponsorName}
+                        onChange={(event) => setSponsorName(event.target.value)}
+                        placeholder="Sponsor name"
+                        className="w-full rounded-lg border border-white/10 bg-white px-2.5 py-2 text-[11px] text-black placeholder:text-black/40"
+                      />
+                      <label className="block text-[10px] text-white/50">
+                        Logo
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className="mt-1 block w-full text-[10px] text-white/60"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) void uploadSponsorLogo(file);
+                          }}
+                        />
+                      </label>
+                      <p className="text-[9px] text-white/35">
+                        {sponsorBusy
+                          ? 'Uploading logo…'
+                          : sponsorLogoKey
+                            ? `Using ${sponsorLogoName || 'uploaded logo'}`
+                            : 'Optional. Logos are stored as a controlled asset, never as a raw URL.'}
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {(
+                          [
+                            ['top-left', 'Top left'],
+                            ['top-right', 'Top right'],
+                            ['bottom-left', 'Bottom left'],
+                            ['bottom-right', 'Bottom right'],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setSponsorPlacement(value)}
+                            className={`rounded-lg border px-2 py-1.5 text-[10px] ${
+                              sponsorPlacement === value
+                                ? 'border-violet-500/40 bg-violet-500/15 text-violet-200'
+                                : 'border-white/8 text-white/40'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleExport}

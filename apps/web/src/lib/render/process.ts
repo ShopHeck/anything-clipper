@@ -10,6 +10,7 @@ import { presignDownload, presignUpload, storageConfigured } from '@/app/api/uti
 import { buildAss, groupWordsIntoLines } from '@/lib/captions/ass';
 import { getCaptionTemplate } from '@/lib/captions/templates';
 import { buildFfmpegArgs } from './ffmpeg';
+import { probeSourceHasAudio } from './probe';
 import { mapWordsToOutput, normalizeCuts, outputDuration, sourceToOutputTime } from './time';
 import { ASPECT_DIMENSIONS, RenderSpec } from './types';
 
@@ -97,12 +98,7 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
     // Captions → ASS file (word times mapped into output time first).
     let assPath: string | null = null;
     if (spec.captions && spec.captions.words.length > 0) {
-      const outputWords = mapWordsToOutput(
-        spec.captions.words,
-        spec.startSec,
-        spec.endSec,
-        cuts
-      );
+      const outputWords = mapWordsToOutput(spec.captions.words, spec.startSec, spec.endSec, cuts);
       if (outputWords.length > 0) {
         const [width, height] = ASPECT_DIMENSIONS[spec.aspect];
         const ass = buildAss(groupWordsIntoLines(outputWords), {
@@ -126,9 +122,11 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
         })
         .filter((k): k is K => k !== null);
 
+    const sourceHasAudio = spec.sourceHasAudio ?? (await probeSourceHasAudio(spec.sourceUrl));
     const args = buildFfmpegArgs({
       spec: {
         ...spec,
+        sourceHasAudio,
         cropKeyframes: shiftKeyframes(spec.cropKeyframes),
         zoomKeyframes: shiftKeyframes(spec.zoomKeyframes),
       },
