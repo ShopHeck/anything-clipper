@@ -132,7 +132,7 @@ export function sanitizeSponsorPackage(input: SponsorPackage): Required<SponsorP
   };
 }
 
-function isSponsorLogoKey(key: string): boolean {
+export function isSponsorLogoKey(key: string): boolean {
   return (
     /^sponsor-logos\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._/-]+$/.test(key) &&
     !key.includes('..') &&

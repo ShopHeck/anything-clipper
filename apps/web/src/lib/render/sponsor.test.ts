@@ -14,9 +14,9 @@ describe('resolveSponsorLogoUrl', () => {
   it('presigns an owned key when storage is configured', () => {
     const url = resolveSponsorLogoUrl('user-1', 'sponsor-logos/user-1/logo.png', {
       storageConfigured: () => true,
-      presignDownload: (key) => `https://storage.example/${key}?sig=1`,
+      presignDownload: (key, expiresSec) => `https://storage.example/${key}?exp=${expiresSec}`,
     });
-    expect(url).toBe('https://storage.example/sponsor-logos/user-1/logo.png?sig=1');
+    expect(url).toBe('https://storage.example/sponsor-logos/user-1/logo.png?exp=3600');
   });
 
   it('returns undefined when no logo key is provided', () => {

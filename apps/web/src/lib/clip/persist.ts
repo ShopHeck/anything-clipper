@@ -1,4 +1,5 @@
 import type { ViralClip } from '@/utils/videoStore';
+import { isSponsorLogoKey, type SponsorPackage } from '@/lib/clip/fight';
 
 export interface PersistedClipRow {
   id: string;
@@ -104,4 +105,39 @@ function stringList(value: unknown): string[] {
 
 function isContentMode(value: string | null | undefined): value is ViralClip['contentMode'] {
   return value === 'generic' || value === 'fight' || value === 'sponsor';
+}
+
+export function sanitizeStoredSponsorPackage(value: unknown): SponsorPackage | null {
+  if (value == null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const sponsorName = typeof input.sponsorName === 'string' ? input.sponsorName.trim() : '';
+  if (!sponsorName) return null;
+  const logoKey = typeof input.logoKey === 'string' ? input.logoKey.trim() : '';
+  const placement = input.placement;
+  return {
+    sponsorName: sponsorName.slice(0, 160),
+    logoKey: logoKey && isSponsorLogoKey(logoKey) ? logoKey : undefined,
+    placement:
+      placement === 'top-left' ||
+      placement === 'top-right' ||
+      placement === 'bottom-left' ||
+      placement === 'bottom-right'
+        ? placement
+        : undefined,
+    opacity:
+      typeof input.opacity === 'number' && Number.isFinite(input.opacity)
+        ? input.opacity
+        : undefined,
+    safeAreaPercent:
+      typeof input.safeAreaPercent === 'number' && Number.isFinite(input.safeAreaPercent)
+        ? input.safeAreaPercent
+        : undefined,
+    accentColor:
+      typeof input.accentColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(input.accentColor)
+        ? input.accentColor
+        : undefined,
+    callToAction:
+      typeof input.callToAction === 'string' ? input.callToAction.trim().slice(0, 180) : undefined,
+  };
 }

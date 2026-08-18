@@ -1,6 +1,10 @@
 import { getApiUser, unauthorized } from '@/app/api/utils/auth';
 import sql from '@/app/api/utils/sql';
-import { clipPersistenceValues, mapPersistedClip } from '@/lib/clip/persist';
+import {
+  clipPersistenceValues,
+  mapPersistedClip,
+  sanitizeStoredSponsorPackage,
+} from '@/lib/clip/persist';
 
 // Every handler verifies the project belongs to the signed-in user before
 // touching it (or any of its child rows).
@@ -130,7 +134,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
     if (sponsor_package !== undefined) {
       setClauses.push(`sponsor_package = $${idx++}`);
-      values.push(JSON.stringify(sponsor_package));
+      values.push(JSON.stringify(sanitizeStoredSponsorPackage(sponsor_package)));
     }
 
     setClauses.push(`updated_at = NOW()`);

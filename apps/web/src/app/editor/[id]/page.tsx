@@ -608,12 +608,25 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       setSponsorLogoKey(key);
       setSponsorLogoName(file.name);
       setSponsorEnabled(true);
+      if (projectId && projectId !== 'new') {
+        await fetch(`/api/projects/${projectId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sponsor_package: {
+              sponsorName: sponsorName.trim() || file.name.replace(/\.[^/.]+$/, ''),
+              logoKey: key,
+              placement: sponsorPlacement,
+            },
+          }),
+        });
+      }
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Logo upload failed.');
     } finally {
       setSponsorBusy(false);
     }
-  }, []);
+  }, [projectId, sponsorName, sponsorPlacement]);
 
   // Download an SRT/VTT subtitle file, optionally translated, built from the
   // project's word timestamps on the server.
