@@ -11,6 +11,7 @@ import { buildAss, groupWordsIntoLines } from '@/lib/captions/ass';
 import { getCaptionTemplate } from '@/lib/captions/templates';
 import { buildFfmpegArgs } from './ffmpeg';
 import { probeSourceHasAudio } from './probe';
+import { hydrateSponsorForProcess } from './sponsor';
 import { mapWordsToOutput, normalizeCuts, outputDuration, sourceToOutputTime } from './time';
 import { ASPECT_DIMENSIONS, RenderSpec } from './types';
 
@@ -84,7 +85,10 @@ export async function processRenderJob(jobId: string): Promise<RenderResult> {
     `;
   }
 
-  const spec = job.spec as RenderSpec;
+  const spec = hydrateSponsorForProcess(job.user_id, job.spec as RenderSpec, {
+    storageConfigured,
+    presignDownload,
+  });
   const workDir = await mkdtemp(path.join(os.tmpdir(), 'render-'));
   const outPath = path.join(workDir, 'output.mp4');
 

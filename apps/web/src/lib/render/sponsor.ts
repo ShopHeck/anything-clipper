@@ -1,4 +1,5 @@
 import { isSponsorLogoKey } from '@/lib/clip/fight';
+import type { RenderSpec } from './types';
 
 export const SPONSOR_LOGO_TTL_SECONDS = 3600;
 
@@ -26,4 +27,20 @@ export function resolveSponsorLogoUrl(
     throw new Error('Object storage is required to render sponsor logos');
   }
   return deps.presignDownload(key, SPONSOR_LOGO_TTL_SECONDS);
+}
+
+export function hydrateSponsorForProcess(
+  userId: string,
+  spec: RenderSpec,
+  deps: SponsorLogoResolver
+): RenderSpec {
+  const logoKey = spec.sponsor?.logoKey;
+  if (!spec.sponsor || !logoKey) return spec;
+  return {
+    ...spec,
+    sponsor: {
+      ...spec.sponsor,
+      logoUrl: resolveSponsorLogoUrl(userId, logoKey, deps),
+    },
+  };
 }

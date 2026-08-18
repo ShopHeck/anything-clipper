@@ -36,6 +36,7 @@ import {
   Loader,
 } from 'lucide-react';
 import { videoStore, type TranscriptSegment, type SponsorPackageState } from '@/utils/videoStore';
+import { projectSaveError } from '@/lib/clip/project-save';
 
 // ─── Types ────────────────────────────────────────────────────
 type Panel = 'transcript' | 'effects' | 'captions' | 'music' | 'export';
@@ -609,7 +610,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       setSponsorLogoName(file.name);
       setSponsorEnabled(true);
       if (projectId && projectId !== 'new') {
-        await fetch(`/api/projects/${projectId}`, {
+        const saveRes = await fetch(`/api/projects/${projectId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -620,6 +621,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             },
           }),
         });
+        const saveError = projectSaveError(
+          saveRes,
+          (await saveRes.json().catch(() => ({}))).error
+        );
+        if (saveError) throw new Error(saveError);
       }
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Logo upload failed.');
